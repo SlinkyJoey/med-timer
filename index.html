@@ -54,7 +54,8 @@
     border: none; border-radius: 14px; padding: 0 16px;
   }
   h2 { font-size: 17px; color: var(--dim); padding: 14px 2px 10px; display: flex; justify-content: space-between; align-items: center; }
-  h2 button { background: none; border: none; color: var(--blue); font-size: 15px; font-weight: 600; }
+  h2 .actions { display: flex; gap: 16px; }
+  h2 button { background: none; border: none; color: var(--blue); font-size: 15px; font-weight: 600; padding: 0; }
   .log-entry {
     background: var(--card); border-radius: 12px; padding: 11px 14px; margin-bottom: 8px;
     font-size: 14px; line-height: 1.45; display: flex; justify-content: space-between; align-items: center; gap: 8px;
@@ -75,7 +76,11 @@
 <body>
 <h1>💊 Med Timer <button class="add-btn" onclick="addMed()">＋ Add</button></h1>
 <div id="meds"></div>
-<h2>History <button onclick="exportLog()">Share / Copy</button></h2>
+<h2>History <span class="actions">
+  <button onclick="backupData()">Backup</button>
+  <button onclick="restoreData()">Restore</button>
+  <button onclick="exportLog()">Share / Copy</button>
+</span></h2>
 <div id="log"></div>
 <div class="toast" id="toast"></div>
 
@@ -186,6 +191,70 @@ function calAlert(medId) {
   a.href = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
   a.download = `take-${m.name.toLowerCase()}.ics`;
   document.body.appendChild(a); a.click(); a.remove();
+}
+
+function backupData() {
+  const payload = JSON.stringify({ app: 'medtimer', v: 1, meds, doses });
+  const finish = () => toast('Backup copied — paste into Restore on the other device');
+  if (navigator.share) {
+    navigator.share({ title: 'Med Timer backup', text: payload })
+      .catch(() => navigator.clipboard.writeText(payload).then(finish));
+  } else {
+    navigator.clipboard.writeText(payload).then(finish);
+  }
+}
+
+function restoreData() {
+  const raw = prompt('Paste a Backup (or lines from Share / Copy):');
+  if (!raw || !raw.trim()) return;
+  const txt = raw.trim();
+  try {
+    if (txt.startsWith('{')) {
+      const b = JSON.parse(txt);
+      if (b.app !== 'medtimer' || !Array.isArray(b.meds) || !Array.isArray(b.doses)) throw 0;
+      if (!confirm(`Replace current data with this backup (${b.meds.length} medications, ${b.doses.length} log entries)?`)) return;
+      meds = b.meds; doses = b.doses;
+    } else {
+      const items = parseLogLines(txt);
+      if (!items.length) throw 0;
+      if (!confirm(`Import ${items.length} log entr${items.length === 1 ? 'y' : 'ies'}? They'll be merged with what's already here.`)) return;
+      mergeImported(items);
+    }
+    saveMeds(); saveDoses(); render();
+    toast('Restore complete');
+  } catch {
+    alert("Couldn't read that — paste the exact text that Backup or Share / Copy produced.");
+  }
+}
+
+// accepts shared-log lines like "12 Jun 18:34 — Targin (every 12h) — Next dose: ..."
+function parseLogLines(txt) {
+  const re = /^(\d{1,2}) (\w{3}) (\d{2}):(\d{2}) — (.+?) \(every ([\d.]+)h\)/;
+  const out = [];
+  for (const line of txt.split('\n')) {
+    const m = line.trim().match(re);
+    if (!m) continue;
+    const mi = MONTHS.indexOf(m[2]);
+    if (mi < 0) continue;
+    const d = new Date(new Date().getFullYear(), mi, +m[1], +m[3], +m[4]);
+    if (d.getTime() > Date.now() + 86400e3) d.setFullYear(d.getFullYear() - 1);
+    out.push({ name: m[5], hours: parseFloat(m[6]), takenAt: d.getTime() });
+  }
+  return out;
+}
+
+function mergeImported(items) {
+  for (const it of items) {
+    let med = meds.find(x => x.name.toLowerCase() === it.name.toLowerCase());
+    if (!med) {
+      med = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: it.name, hours: it.hours };
+      meds.push(med);
+    }
+    const dup = doses.some(d => d.medId === med.id && Math.abs(d.takenAt - it.takenAt) < 60e3);
+    if (!dup) doses.push({ id: it.takenAt + '-' + Math.random().toString(36).slice(2, 7),
+                           medId: med.id, name: med.name, hours: it.hours, takenAt: it.takenAt });
+  }
+  doses.sort((a, b) => b.takenAt - a.takenAt);
 }
 
 function exportLog() {
