@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Med Timer</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Med Timer">
+<meta name="theme-color" content="#0e1116">
+<style>
+  :root {
+    --bg: #0e1116; --card: #1a1f29; --card2: #232a37;
+    --text: #eef1f6; --dim: #8b94a3;
+    --red: #ff6b6b; --green: #4cd97b; --amber: #ffb454; --blue: #5aa9ff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro", sans-serif;
+    padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 24px);
+    max-width: 520px; margin: 0 auto;
+  }
+  h1 { font-size: 26px; padding: 8px 2px 14px; display: flex; align-items: center; justify-content: space-between; }
+  h1 .add-btn {
+    font-size: 17px; font-weight: 600; color: var(--blue); background: var(--card);
+    border: none; border-radius: 12px; padding: 10px 16px;
+  }
+  .card {
+    background: var(--card); border-radius: 18px; padding: 16px; margin-bottom: 14px;
+  }
+  .med-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .med-name { font-size: 21px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .badge { font-size: 13px; font-weight: 600; color: var(--dim); background: var(--card2); border-radius: 8px; padding: 4px 9px; }
+  .edit-btn { background: none; border: none; color: var(--dim); font-size: 17px; padding: 6px 8px; }
+  .countdown {
+    font-variant-numeric: tabular-nums; font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 42px; font-weight: 700; letter-spacing: 1px; line-height: 1.15;
+  }
+  .cd-wait { color: var(--amber); }
+  .cd-ok { color: var(--green); font-size: 30px; font-family: -apple-system, sans-serif; letter-spacing: 0; }
+  .cd-none { color: var(--dim); font-size: 17px; font-family: -apple-system, sans-serif; font-weight: 500; letter-spacing: 0; }
+  .sub { color: var(--dim); font-size: 14px; margin-top: 4px; min-height: 18px; }
+  .row { display: flex; gap: 10px; margin-top: 14px; }
+  .take-btn {
+    flex: 1; font-size: 18px; font-weight: 700; color: #fff; background: var(--red);
+    border: none; border-radius: 14px; padding: 15px 0;
+  }
+  .take-btn:active { opacity: .8; }
+  .cal-btn {
+    font-size: 15px; font-weight: 600; color: var(--blue); background: var(--card2);
+    border: none; border-radius: 14px; padding: 0 16px;
+  }
+  h2 { font-size: 17px; color: var(--dim); padding: 14px 2px 10px; display: flex; justify-content: space-between; align-items: center; }
+  h2 button { background: none; border: none; color: var(--blue); font-size: 15px; font-weight: 600; }
+  .log-entry {
+    background: var(--card); border-radius: 12px; padding: 11px 14px; margin-bottom: 8px;
+    font-size: 14px; line-height: 1.45; display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  }
+  .log-entry .when { color: var(--dim); }
+  .log-entry .del { background: none; border: none; color: var(--dim); font-size: 15px; padding: 4px 6px; flex-shrink: 0; }
+  .empty { color: var(--dim); font-size: 15px; text-align: center; padding: 20px 0; }
+  .toast {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(env(safe-area-inset-bottom) + 30px);
+    background: var(--card2); color: var(--text); padding: 12px 20px; border-radius: 14px;
+    font-size: 15px; font-weight: 600; opacity: 0; transition: opacity .25s; pointer-events: none;
+    box-shadow: 0 6px 24px rgba(0,0,0,.45); max-width: 86vw; text-align: center;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<h1>💊 Med Timer <button class="add-btn" onclick="addMed()">＋ Add</button></h1>
+<div id="meds"></div>
+<h2>History <button onclick="exportLog()">Share / Copy</button></h2>
+<div id="log"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const MEDS_KEY = 'mt.meds', DOSES_KEY = 'mt.doses';
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+let meds = JSON.parse(localStorage.getItem(MEDS_KEY) || 'null');
+if (!meds) {
+  meds = [
+    { id: 'targin',  name: 'Targin',  hours: 12 },
+    { id: 'panadol', name: 'Panadol', hours: 4 },
+  ];
+  saveMeds();
+}
+let doses = JSON.parse(localStorage.getItem(DOSES_KEY) || '[]'); // newest first
+
+function saveMeds()  { localStorage.setItem(MEDS_KEY, JSON.stringify(meds)); }
+function saveDoses() { localStorage.setItem(DOSES_KEY, JSON.stringify(doses)); }
+
+const pad = n => String(n).padStart(2, '0');
+function fmt(ts) {
+  const d = new Date(ts);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function remainStr(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s/3600)}:${pad(Math.floor(s/60)%60)}:${pad(s%60)}`;
+}
+function lastDose(medId) { return doses.find(d => d.medId === medId); }
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+function takeDose(medId) {
+  const m = meds.find(x => x.id === medId);
+  if (!m) return;
+  const last = lastDose(medId);
+  const now = Date.now();
+  if (last) {
+    const nextAt = last.takenAt + m.hours * 3600e3;
+    if (now < nextAt) {
+      const left = remainStr(nextAt - now);
+      if (!confirm(`⚠️ ${m.name} isn't due for another ${left} (at ${fmt(nextAt)}).\n\nLog this dose anyway?`)) return;
+    }
+  }
+  doses.unshift({ id: now + '-' + Math.random().toString(36).slice(2, 7),
+                  medId, name: m.name, hours: m.hours, takenAt: now });
+  saveDoses();
+  render();
+  toast(`${m.name} logged — next dose at ${fmt(now + m.hours * 3600e3)}`);
+}
+
+function addMed() {
+  const name = (prompt('Medication name?') || '').trim();
+  if (!name) return;
+  const hours = parseFloat(prompt(`Hours between doses of ${name}?`) || '');
+  if (!(hours > 0 && hours <= 168)) { alert('Enter hours between 0 and 168.'); return; }
+  meds.push({ id: Date.now().toString(36), name, hours });
+  saveMeds();
+  render();
+}
+
+function editMed(medId) {
+  const m = meds.find(x => x.id === medId);
+  if (!m) return;
+  const name = prompt('Medication name (leave empty to delete):', m.name);
+  if (name === null) return;
+  if (name.trim() === '') {
+    if (confirm(`Delete ${m.name}? Its history entries are kept.`)) {
+      meds = meds.filter(x => x.id !== medId);
+      saveMeds(); render();
+    }
+    return;
+  }
+  const hours = parseFloat(prompt('Hours between doses:', m.hours) || '');
+  if (!(hours > 0 && hours <= 168)) { alert('Enter hours between 0 and 168.'); return; }
+  m.name = name.trim(); m.hours = hours;
+  saveMeds(); render();
+}
+
+function delDose(doseId) {
+  const d = doses.find(x => x.id === doseId);
+  if (d && confirm(`Remove this ${d.name} entry from the log?`)) {
+    doses = doses.filter(x => x.id !== doseId);
+    saveDoses(); render();
+  }
+}
+
+function calAlert(medId) {
+  const m = meds.find(x => x.id === medId);
+  const last = lastDose(medId);
+  if (!m || !last) return;
+  const nextAt = new Date(last.takenAt + m.hours * 3600e3);
+  const u = d => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const ics = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//MedTimer//EN','BEGIN:VEVENT',
+    `UID:${last.id}@medtimer`, `DTSTAMP:${u(new Date())}`, `DTSTART:${u(nextAt)}`,
+    `DTEND:${u(new Date(nextAt.getTime() + 5*60e3))}`, `SUMMARY:Take ${m.name}`,
+    'BEGIN:VALARM','TRIGGER:PT0S','ACTION:DISPLAY',`DESCRIPTION:Take ${m.name}`,'END:VALARM',
+    'END:VEVENT','END:VCALENDAR'].join('\r\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
+  a.download = `take-${m.name.toLowerCase()}.ics`;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+function exportLog() {
+  if (!doses.length) { toast('No doses logged yet'); return; }
+  const text = doses.map(d =>
+    `${fmt(d.takenAt)} — ${d.name} (every ${d.hours}h) — Next dose: ${fmt(d.takenAt + d.hours*3600e3)}`
+  ).join('\n');
+  if (navigator.share) {
+    navigator.share({ title: 'Medication Log', text }).catch(() => {});
+  } else {
+    navigator.clipboard.writeText(text).then(() => toast('Log copied to clipboard'));
+  }
+}
+
+function render() {
+  const now = Date.now();
+  $('meds').innerHTML = meds.map(m => {
+    const last = lastDose(m.id);
+    let cd, sub;
+    if (!last) {
+      cd = `<div class="countdown cd-none">No doses logged yet</div>`;
+      sub = `Tap Take when you take it`;
+    } else {
+      const nextAt = last.takenAt + m.hours * 3600e3;
+      if (now >= nextAt) {
+        cd = `<div class="countdown cd-ok">✅ OK to take now</div>`;
+        sub = `Was due ${fmt(nextAt)} · last taken ${fmt(last.takenAt)}`;
+      } else {
+        cd = `<div class="countdown cd-wait" data-next="${nextAt}">${remainStr(nextAt - now)}</div>`;
+        sub = `Next dose ${fmt(nextAt)} · last taken ${fmt(last.takenAt)}`;
+      }
+    }
+    const calBtn = last && now < last.takenAt + m.hours*3600e3
+      ? `<button class="cal-btn" onclick="calAlert('${m.id}')">📅 Alert</button>` : '';
+    return `<div class="card">
+      <div class="med-top">
+        <div class="med-name">${m.name} <span class="badge">every ${m.hours}h</span></div>
+        <button class="edit-btn" onclick="editMed('${m.id}')">✎</button>
+      </div>
+      ${cd}<div class="sub">${sub}</div>
+      <div class="row">
+        <button class="take-btn" onclick="takeDose('${m.id}')">TAKE ${m.name.toUpperCase()} NOW</button>
+        ${calBtn}
+      </div>
+    </div>`;
+  }).join('') || `<div class="empty">No medications — tap ＋ Add</div>`;
+
+  $('log').innerHTML = doses.slice(0, 200).map(d =>
+    `<div class="log-entry"><div><b>${d.name}</b> <span class="when">· ${fmt(d.takenAt)} · every ${d.hours}h</span><br>
+     Next dose: ${fmt(d.takenAt + d.hours*3600e3)}</div>
+     <button class="del" onclick="delDose('${d.id}')">✕</button></div>`
+  ).join('') || `<div class="empty">Doses you log will appear here</div>`;
+}
+
+// per-second tick: update only countdown text (cheap), full render on the minute
+setInterval(() => {
+  const now = Date.now();
+  let needFull = false;
+  document.querySelectorAll('.cd-wait[data-next]').forEach(el => {
+    const nextAt = +el.dataset.next;
+    if (now >= nextAt) needFull = true;
+    else el.textContent = remainStr(nextAt - now);
+  });
+  if (needFull) render();
+}, 1000);
+
+render();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
