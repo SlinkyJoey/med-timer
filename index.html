@@ -17,6 +17,7 @@
     --red: #ff6b6b; --green: #4cd97b; --amber: #ffb454; --blue: #5aa9ff;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  button { touch-action: manipulation; font-family: inherit; cursor: pointer; }
   body {
     background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro", sans-serif;
@@ -68,9 +69,34 @@
     bottom: calc(env(safe-area-inset-bottom) + 30px);
     background: var(--card2); color: var(--text); padding: 12px 20px; border-radius: 14px;
     font-size: 15px; font-weight: 600; opacity: 0; transition: opacity .25s; pointer-events: none;
-    box-shadow: 0 6px 24px rgba(0,0,0,.45); max-width: 86vw; text-align: center;
+    box-shadow: 0 6px 24px rgba(0,0,0,.45); max-width: 86vw; text-align: center; z-index: 99;
   }
   .toast.show { opacity: 1; }
+
+  /* in-app dialogs (replaces iOS confirm/prompt, which Safari can silently swallow) */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 50;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .sheet {
+    background: var(--card2); border-radius: 20px; padding: 20px; width: 100%; max-width: 400px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.5);
+  }
+  .dlg-title { font-size: 19px; font-weight: 700; margin-bottom: 8px; }
+  .dlg-msg { font-size: 15px; color: var(--dim); line-height: 1.45; margin-bottom: 14px; white-space: pre-line; }
+  .dlg-in {
+    width: 100%; background: var(--bg); color: var(--text); border: 1px solid #333c4d;
+    border-radius: 12px; padding: 13px 14px; font-size: 17px; margin-bottom: 10px; font-family: inherit;
+  }
+  textarea.dlg-in { min-height: 110px; resize: vertical; }
+  .dlg-row { display: flex; gap: 10px; margin-top: 8px; }
+  .dlg-btn {
+    flex: 1; border: none; border-radius: 12px; padding: 14px 0; font-size: 16px; font-weight: 600;
+  }
+  .dlg-cancel { background: var(--card); color: var(--text); }
+  .dlg-ok { background: var(--blue); color: #fff; }
+  .dlg-ok.danger { background: var(--red); }
+  .dlg-extra { background: none; border: none; color: var(--red); font-size: 15px; font-weight: 600; padding: 12px 0 2px; width: 100%; text-align: center; }
 </style>
 </head>
 <body>
@@ -103,6 +129,7 @@ function saveMeds()  { localStorage.setItem(MEDS_KEY, JSON.stringify(meds)); }
 function saveDoses() { localStorage.setItem(DOSES_KEY, JSON.stringify(doses)); }
 
 const pad = n => String(n).padStart(2, '0');
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 function fmt(ts) {
   const d = new Date(ts);
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -121,7 +148,36 @@ function toast(msg) {
   t._h = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
-function takeDose(medId) {
+/* In-app dialog. Returns: null (cancel), 'extra' (extra button), true (ok, no inputs),
+   or array of input values (ok, with inputs). */
+function dialog({ title, message = '', inputs = [], okText = 'OK', cancelText = 'Cancel', danger = false, extraText = null }) {
+  return new Promise(resolve => {
+    const ov = document.createElement('div');
+    ov.className = 'overlay';
+    ov.innerHTML = `<div class="sheet">
+      <div class="dlg-title">${esc(title)}</div>
+      ${message ? `<div class="dlg-msg">${esc(message)}</div>` : ''}
+      ${inputs.map((f, i) => f.type === 'textarea'
+        ? `<textarea class="dlg-in" id="dlg-in-${i}" placeholder="${esc(f.placeholder || '')}"></textarea>`
+        : `<input class="dlg-in" id="dlg-in-${i}" type="text" ${f.type === 'number' ? 'inputmode="decimal"' : ''}
+             placeholder="${esc(f.placeholder || '')}" value="${esc(f.value ?? '')}">`).join('')}
+      <div class="dlg-row">
+        <button class="dlg-btn dlg-cancel">${esc(cancelText)}</button>
+        <button class="dlg-btn dlg-ok${danger ? ' danger' : ''}">${esc(okText)}</button>
+      </div>
+      ${extraText ? `<button class="dlg-extra">${esc(extraText)}</button>` : ''}
+    </div>`;
+    document.body.appendChild(ov);
+    const done = v => { ov.remove(); resolve(v); };
+    ov.querySelector('.dlg-cancel').addEventListener('click', () => done(null));
+    ov.querySelector('.dlg-ok').addEventListener('click', () =>
+      done(inputs.length ? inputs.map((_, i) => ov.querySelector(`#dlg-in-${i}`).value) : true));
+    if (extraText) ov.querySelector('.dlg-extra').addEventListener('click', () => done('extra'));
+    ov.addEventListener('click', e => { if (e.target === ov) done(null); });
+  });
+}
+
+async function takeDose(medId) {
   const m = meds.find(x => x.id === medId);
   if (!m) return;
   const last = lastDose(medId);
@@ -129,8 +185,12 @@ function takeDose(medId) {
   if (last) {
     const nextAt = last.takenAt + m.hours * 3600e3;
     if (now < nextAt) {
-      const left = remainStr(nextAt - now);
-      if (!confirm(`⚠️ ${m.name} isn't due for another ${left} (at ${fmt(nextAt)}).\n\nLog this dose anyway?`)) return;
+      const ok = await dialog({
+        title: `⚠️ ${m.name} isn't due yet`,
+        message: `Next dose in ${remainStr(nextAt - now)} (at ${fmt(nextAt)}).\nLog this dose anyway?`,
+        okText: 'Log anyway', danger: true,
+      });
+      if (ok !== true) return;
     }
   }
   doses.unshift({ id: now + '-' + Math.random().toString(36).slice(2, 7),
@@ -140,37 +200,61 @@ function takeDose(medId) {
   toast(`${m.name} logged — next dose at ${fmt(now + m.hours * 3600e3)}`);
 }
 
-function addMed() {
-  const name = (prompt('Medication name?') || '').trim();
-  if (!name) return;
-  const hours = parseFloat(prompt(`Hours between doses of ${name}?`) || '');
-  if (!(hours > 0 && hours <= 168)) { alert('Enter hours between 0 and 168.'); return; }
+async function addMed() {
+  const r = await dialog({
+    title: 'Add medication',
+    inputs: [{ placeholder: 'Name (e.g. Nurofen)' }, { placeholder: 'Hours between doses', type: 'number' }],
+    okText: 'Add',
+  });
+  if (!r) return;
+  const name = r[0].trim();
+  const hours = parseFloat(r[1]);
+  if (!name) { toast('Name is required'); return; }
+  if (!(hours > 0 && hours <= 168)) { toast('Hours must be between 0 and 168'); return; }
   meds.push({ id: Date.now().toString(36), name, hours });
   saveMeds();
   render();
+  toast(`${name} added — every ${hours}h`);
 }
 
-function editMed(medId) {
+async function editMed(medId) {
   const m = meds.find(x => x.id === medId);
   if (!m) return;
-  const name = prompt('Medication name (leave empty to delete):', m.name);
-  if (name === null) return;
-  if (name.trim() === '') {
-    if (confirm(`Delete ${m.name}? Its history entries are kept.`)) {
+  const r = await dialog({
+    title: `Edit ${m.name}`,
+    inputs: [{ value: m.name, placeholder: 'Name' }, { value: m.hours, placeholder: 'Hours between doses', type: 'number' }],
+    okText: 'Save', extraText: `Delete ${m.name}…`,
+  });
+  if (!r) return;
+  if (r === 'extra') {
+    const sure = await dialog({
+      title: `Delete ${m.name}?`,
+      message: 'Its history entries are kept.',
+      okText: 'Delete', danger: true,
+    });
+    if (sure === true) {
       meds = meds.filter(x => x.id !== medId);
       saveMeds(); render();
     }
     return;
   }
-  const hours = parseFloat(prompt('Hours between doses:', m.hours) || '');
-  if (!(hours > 0 && hours <= 168)) { alert('Enter hours between 0 and 168.'); return; }
-  m.name = name.trim(); m.hours = hours;
+  const name = r[0].trim();
+  const hours = parseFloat(r[1]);
+  if (!name) { toast('Name is required'); return; }
+  if (!(hours > 0 && hours <= 168)) { toast('Hours must be between 0 and 168'); return; }
+  m.name = name; m.hours = hours;
   saveMeds(); render();
 }
 
-function delDose(doseId) {
+async function delDose(doseId) {
   const d = doses.find(x => x.id === doseId);
-  if (d && confirm(`Remove this ${d.name} entry from the log?`)) {
+  if (!d) return;
+  const sure = await dialog({
+    title: 'Remove log entry?',
+    message: `${d.name} · ${fmt(d.takenAt)}`,
+    okText: 'Remove', danger: true,
+  });
+  if (sure === true) {
     doses = doses.filter(x => x.id !== doseId);
     saveDoses(); render();
   }
@@ -189,7 +273,7 @@ function calAlert(medId) {
     'END:VEVENT','END:VCALENDAR'].join('\r\n');
   const a = document.createElement('a');
   a.href = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
-  a.download = `take-${m.name.toLowerCase()}.ics`;
+  a.download = `take-${m.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.ics`;
   document.body.appendChild(a); a.click(); a.remove();
 }
 
@@ -204,26 +288,41 @@ function backupData() {
   }
 }
 
-function restoreData() {
-  const raw = prompt('Paste a Backup (or lines from Share / Copy):');
-  if (!raw || !raw.trim()) return;
-  const txt = raw.trim();
+async function restoreData() {
+  const r = await dialog({
+    title: 'Restore',
+    message: 'Paste a Backup (or lines from Share / Copy):',
+    inputs: [{ type: 'textarea', placeholder: 'Paste here' }],
+    okText: 'Restore',
+  });
+  if (!r || !r[0].trim()) return;
+  const txt = r[0].trim();
   try {
     if (txt.startsWith('{')) {
       const b = JSON.parse(txt);
       if (b.app !== 'medtimer' || !Array.isArray(b.meds) || !Array.isArray(b.doses)) throw 0;
-      if (!confirm(`Replace current data with this backup (${b.meds.length} medications, ${b.doses.length} log entries)?`)) return;
+      const sure = await dialog({
+        title: 'Replace current data?',
+        message: `This backup has ${b.meds.length} medications and ${b.doses.length} log entries.`,
+        okText: 'Replace', danger: true,
+      });
+      if (sure !== true) return;
       meds = b.meds; doses = b.doses;
     } else {
       const items = parseLogLines(txt);
       if (!items.length) throw 0;
-      if (!confirm(`Import ${items.length} log entr${items.length === 1 ? 'y' : 'ies'}? They'll be merged with what's already here.`)) return;
+      const sure = await dialog({
+        title: `Import ${items.length} log entr${items.length === 1 ? 'y' : 'ies'}?`,
+        message: "They'll be merged with what's already here.",
+        okText: 'Import',
+      });
+      if (sure !== true) return;
       mergeImported(items);
     }
     saveMeds(); saveDoses(); render();
     toast('Restore complete');
   } catch {
-    alert("Couldn't read that — paste the exact text that Backup or Share / Copy produced.");
+    toast("Couldn't read that — paste the exact Backup or Share / Copy text");
   }
 }
 
@@ -291,25 +390,25 @@ function render() {
       ? `<button class="cal-btn" onclick="calAlert('${m.id}')">📅 Alert</button>` : '';
     return `<div class="card">
       <div class="med-top">
-        <div class="med-name">${m.name} <span class="badge">every ${m.hours}h</span></div>
+        <div class="med-name">${esc(m.name)} <span class="badge">every ${m.hours}h</span></div>
         <button class="edit-btn" onclick="editMed('${m.id}')">✎</button>
       </div>
       ${cd}<div class="sub">${sub}</div>
       <div class="row">
-        <button class="take-btn" onclick="takeDose('${m.id}')">TAKE ${m.name.toUpperCase()} NOW</button>
+        <button class="take-btn" onclick="takeDose('${m.id}')">TAKE ${esc(m.name.toUpperCase())} NOW</button>
         ${calBtn}
       </div>
     </div>`;
   }).join('') || `<div class="empty">No medications — tap ＋ Add</div>`;
 
   $('log').innerHTML = doses.slice(0, 200).map(d =>
-    `<div class="log-entry"><div><b>${d.name}</b> <span class="when">· ${fmt(d.takenAt)} · every ${d.hours}h</span><br>
+    `<div class="log-entry"><div><b>${esc(d.name)}</b> <span class="when">· ${fmt(d.takenAt)} · every ${d.hours}h</span><br>
      Next dose: ${fmt(d.takenAt + d.hours*3600e3)}</div>
      <button class="del" onclick="delDose('${d.id}')">✕</button></div>`
   ).join('') || `<div class="empty">Doses you log will appear here</div>`;
 }
 
-// per-second tick: update only countdown text (cheap), full render on the minute
+// per-second tick: update countdown text only; full render when one expires
 setInterval(() => {
   const now = Date.now();
   let needFull = false;

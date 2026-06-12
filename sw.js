@@ -1,4 +1,4 @@
-const CACHE = 'medtimer-v2';
+const CACHE = 'medtimer-v3';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-180.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -13,9 +13,42 @@ self.addEventListener('activate', e => {
   );
 });
 
-// cache-first so the installed app keeps working with no server at all
+const withTimeout = (promise, ms) =>
+  Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+
 self.addEventListener('fetch', e => {
+  const req = e.request;
+  if (req.method !== 'GET') return;
+
+  if (req.mode === 'navigate') {
+    // network-first for the page itself: updates arrive immediately, reload never
+    // hangs (4s timeout), and offline still falls back to the cached app
+    e.respondWith(
+      withTimeout(fetch(req), 4000)
+        .then(resp => {
+          if (resp.ok) {
+            const copy = resp.clone();
+            caches.open(CACHE).then(c => { c.put(req, copy); c.put('./index.html', resp.clone()); });
+          }
+          return resp;
+        })
+        .catch(() =>
+          caches.match(req, { ignoreSearch: true })
+            .then(hit => hit || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // assets: serve from cache instantly, refresh the cache in the background
   e.respondWith(
-    caches.match(e.request, { ignoreSearch: true }).then(hit => hit || fetch(e.request))
+    caches.match(req, { ignoreSearch: true }).then(hit => {
+      const refresh = fetch(req)
+        .then(resp => {
+          if (resp.ok) caches.open(CACHE).then(c => c.put(req, resp.clone()));
+          return resp;
+        })
+        .catch(() => hit);
+      return hit || refresh;
+    })
   );
 });
