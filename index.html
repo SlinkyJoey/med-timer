@@ -17,7 +17,8 @@
     --red: #ff6b6b; --green: #4cd97b; --amber: #ffb454; --blue: #5aa9ff;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  button { touch-action: manipulation; font-family: inherit; cursor: pointer; }
+  button, select, input, textarea { font-family: inherit; }
+  button { touch-action: manipulation; cursor: pointer; }
   body {
     background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro", sans-serif;
@@ -29,76 +30,67 @@
     font-size: 17px; font-weight: 600; color: var(--blue); background: var(--card);
     border: none; border-radius: 12px; padding: 10px 16px;
   }
-  .card {
-    background: var(--card); border-radius: 18px; padding: 16px; margin-bottom: 14px;
-  }
-  .med-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-  .med-name { font-size: 21px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-  .badge { font-size: 13px; font-weight: 600; color: var(--dim); background: var(--card2); border-radius: 8px; padding: 4px 9px; }
+  .section { font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+             color: var(--dim); padding: 8px 2px 8px; }
+  .card { background: var(--card); border-radius: 18px; padding: 16px; margin-bottom: 14px; }
+  .med-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .med-name { font-size: 21px; font-weight: 700; }
+  .badge { font-size: 13px; font-weight: 600; color: var(--dim); background: var(--card2);
+           border-radius: 8px; padding: 4px 9px; white-space: nowrap; display: inline-block; margin-top: 6px; }
+  .reason { color: var(--dim); font-size: 13px; margin-top: 6px; }
   .edit-btn { background: none; border: none; color: var(--dim); font-size: 17px; padding: 6px 8px; }
   .countdown {
     font-variant-numeric: tabular-nums; font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    font-size: 42px; font-weight: 700; letter-spacing: 1px; line-height: 1.15;
+    font-size: 42px; font-weight: 700; letter-spacing: 1px; line-height: 1.15; margin-top: 10px;
   }
   .cd-wait { color: var(--amber); }
   .cd-ok { color: var(--green); font-size: 30px; font-family: -apple-system, sans-serif; letter-spacing: 0; }
   .cd-none { color: var(--dim); font-size: 17px; font-family: -apple-system, sans-serif; font-weight: 500; letter-spacing: 0; }
   .sub { color: var(--dim); font-size: 14px; margin-top: 4px; min-height: 18px; }
+  .tally { font-size: 13px; font-weight: 600; margin-top: 5px; color: var(--dim); }
+  .tally.warn { color: var(--amber); }
+  .tally.over { color: var(--red); }
   .row { display: flex; gap: 10px; margin-top: 14px; }
-  .take-btn {
-    flex: 1; font-size: 18px; font-weight: 700; color: #fff; background: var(--red);
-    border: none; border-radius: 14px; padding: 15px 0;
-  }
+  .take-btn { flex: 1; font-size: 18px; font-weight: 700; color: #fff; background: var(--red);
+              border: none; border-radius: 14px; padding: 15px 0; }
   .take-btn:active { opacity: .8; }
-  .cal-btn {
-    font-size: 15px; font-weight: 600; color: var(--blue); background: var(--card2);
-    border: none; border-radius: 14px; padding: 0 16px;
-  }
+  .cal-btn { font-size: 15px; font-weight: 600; color: var(--blue); background: var(--card2);
+             border: none; border-radius: 14px; padding: 0 16px; }
   h2 { font-size: 17px; color: var(--dim); padding: 14px 2px 10px; display: flex; justify-content: space-between; align-items: center; }
   h2 .actions { display: flex; gap: 16px; }
   h2 button { background: none; border: none; color: var(--blue); font-size: 15px; font-weight: 600; padding: 0; }
-  .log-entry {
-    background: var(--card); border-radius: 12px; padding: 11px 14px; margin-bottom: 8px;
-    font-size: 14px; line-height: 1.45; display: flex; justify-content: space-between; align-items: center; gap: 8px;
-  }
+  .log-entry { background: var(--card); border-radius: 12px; padding: 11px 14px; margin-bottom: 8px;
+               font-size: 14px; line-height: 1.45; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .log-entry .when { color: var(--dim); }
   .log-entry .del { background: none; border: none; color: var(--dim); font-size: 15px; padding: 4px 6px; flex-shrink: 0; }
   .empty { color: var(--dim); font-size: 15px; text-align: center; padding: 20px 0; }
-  .toast {
-    position: fixed; left: 50%; transform: translateX(-50%);
-    bottom: calc(env(safe-area-inset-bottom) + 30px);
-    background: var(--card2); color: var(--text); padding: 12px 20px; border-radius: 14px;
-    font-size: 15px; font-weight: 600; opacity: 0; transition: opacity .25s; pointer-events: none;
-    box-shadow: 0 6px 24px rgba(0,0,0,.45); max-width: 86vw; text-align: center; z-index: 99;
-  }
+  .footer-btn { display: block; width: 100%; background: none; border: none; color: var(--dim);
+                font-size: 14px; font-weight: 600; padding: 18px 0 4px; }
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 30px);
+           background: var(--card2); color: var(--text); padding: 12px 20px; border-radius: 14px;
+           font-size: 15px; font-weight: 600; opacity: 0; transition: opacity .25s; pointer-events: none;
+           box-shadow: 0 6px 24px rgba(0,0,0,.45); max-width: 86vw; text-align: center; z-index: 99; }
   .toast.show { opacity: 1; }
 
-  /* in-app dialogs (replaces iOS confirm/prompt, which Safari can silently swallow) */
-  .overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 50;
-    display: flex; align-items: center; justify-content: center; padding: 20px;
-  }
-  .sheet {
-    background: var(--card2); border-radius: 20px; padding: 20px; width: 100%; max-width: 400px;
-    box-shadow: 0 12px 40px rgba(0,0,0,.5);
-  }
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 50;
+             display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .sheet { background: var(--card2); border-radius: 20px; padding: 20px; width: 100%; max-width: 400px;
+           box-shadow: 0 12px 40px rgba(0,0,0,.5); max-height: 90vh; overflow-y: auto; }
   .dlg-title { font-size: 19px; font-weight: 700; margin-bottom: 8px; }
   .dlg-msg { font-size: 15px; color: var(--dim); line-height: 1.45; margin-bottom: 14px; white-space: pre-line; }
-  .dlg-in {
-    width: 100%; background: var(--bg); color: var(--text); border: 1px solid #333c4d;
-    border-radius: 12px; padding: 13px 14px; font-size: 17px; margin-bottom: 10px; font-family: inherit;
-  }
+  .dlg-in { width: 100%; background: var(--bg); color: var(--text); border: 1px solid #333c4d;
+            border-radius: 12px; padding: 13px 14px; font-size: 17px; margin-bottom: 10px; }
+  select.dlg-in { appearance: none; -webkit-appearance: none; }
   textarea.dlg-in { min-height: 110px; resize: vertical; }
   .dlg-row { display: flex; gap: 10px; margin-top: 8px; }
-  .dlg-btn {
-    flex: 1; border: none; border-radius: 12px; padding: 14px 0; font-size: 16px; font-weight: 600;
-  }
+  .dlg-btn { flex: 1; border: none; border-radius: 12px; padding: 14px 0; font-size: 16px; font-weight: 600; }
   .dlg-cancel { background: var(--card); color: var(--text); }
   .dlg-ok { background: var(--blue); color: #fff; }
   .dlg-ok.danger { background: var(--red); }
   .dlg-extra { background: none; border: none; color: var(--red); font-size: 15px; font-weight: 600; padding: 12px 0 2px; width: 100%; text-align: center; }
   .dlg-skip { background: var(--card); color: var(--text); }
   .dlg-label { font-size: 13px; color: var(--dim); font-weight: 600; margin: 4px 0 6px; }
+  .dlg-total { font-size: 14px; color: var(--green); font-weight: 600; margin: -2px 0 10px; min-height: 18px; }
   .pain-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 2px 0 12px; }
   .pain-chip { border: none; border-radius: 12px; padding: 15px 0; font-size: 18px; font-weight: 700; color: #10151c; }
   .pain-chip:active { transform: scale(.94); }
@@ -107,6 +99,7 @@
 <body>
 <h1>💊 Med Timer <button class="add-btn" onclick="addMed()">＋ Add</button></h1>
 <div id="meds"></div>
+<button class="footer-btn" onclick="starterPrompt(true)">↺ Load standard medication list</button>
 <h2>History <span class="actions">
   <button onclick="backupData()">Backup</button>
   <button onclick="restoreData()">Restore</button>
@@ -117,15 +110,32 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const MEDS_KEY = 'mt.meds', DOSES_KEY = 'mt.doses';
+const MEDS_KEY = 'mt.meds', DOSES_KEY = 'mt.doses', SEED_FLAG = 'mt.starterV2';
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const DAY = 86400e3;
 
+// User's medication base. strength = mg per tablet (tablet-based dosing);
+// meds with no strength are logged in mg directly (e.g. variable-strength Endone).
+// maxPerDay tracks against the user's own stated frequency/limit.
+const STARTER_MEDS = [
+  { id:'coloxyl',       name:'Coloxyl',       category:'scheduled', hours:24, strength:50,  tablets:2, reason:'Constipation', note:'Once nightly',     maxPerDay:{doses:1}, aliases:['coloxyl','docusate'] },
+  { id:'ibuprofen',     name:'Ibuprofen',     category:'scheduled', hours:8,  strength:200, tablets:2, reason:'Pain',         note:'3 times a day',    maxPerDay:{doses:3}, aliases:['ibuprofen','nurofen','brufen'] },
+  { id:'targin',        name:'Targin',        category:'scheduled', hours:12, strength:15,  tablets:1, reason:'Pain',         note:'Morning & night',  maxPerDay:{doses:2}, aliases:['targin'] },
+  { id:'paracetamol',   name:'Paracetamol',   category:'scheduled', hours:6,  strength:500, tablets:2, reason:'Pain',         note:'4 times a day',    maxPerDay:{doses:4}, aliases:['paracetamol','panadol'] },
+  { id:'pantoprazole',  name:'Pantoprazole',  category:'scheduled', hours:24, strength:40,  tablets:1, reason:'Stomach protector', note:'Once daily', maxPerDay:{doses:1}, aliases:['pantoprazole','somac'] },
+  { id:'metoclopramide',name:'Metoclopramide',category:'prn',       hours:8,  strength:10,  tablets:1, reason:'Nausea',       note:'Up to 3×/day',     maxPerDay:{doses:3}, aliases:['metoclopramide','maxolon'] },
+  { id:'ondansetron',   name:'Ondansetron',   category:'prn',       hours:8,  strength:8,   tablets:1, reason:'Nausea',       note:'Up to 3×/day',     maxPerDay:{doses:3}, aliases:['ondansetron','zofran'] },
+  { id:'endone',        name:'Endone',        category:'prn',       hours:4,             dose:5,    reason:'Pain',         note:'5–10mg · max 60mg/24h', maxPerDay:{mg:60}, aliases:['endone'] },
+  { id:'tapentadol',    name:'Tapentadol',    category:'prn',       hours:6,  strength:50,  tablets:1, reason:'Pain',         note:'6 hourly',         maxPerDay:{doses:4}, aliases:['tapentadol','palexia'] },
+];
+const cleanMed = m => { const c = { ...m }; delete c.aliases; return c; };
+
+let freshInstall = false;
 let meds = JSON.parse(localStorage.getItem(MEDS_KEY) || 'null');
 if (!meds) {
-  meds = [
-    { id: 'targin',  name: 'Targin',  hours: 12 },
-    { id: 'panadol', name: 'Panadol', hours: 4 },
-  ];
+  meds = STARTER_MEDS.map(cleanMed);
+  freshInstall = true;
+  localStorage.setItem(SEED_FLAG, '1');
   saveMeds();
 }
 let doses = JSON.parse(localStorage.getItem(DOSES_KEY) || '[]'); // newest first
@@ -135,37 +145,49 @@ function saveDoses() { localStorage.setItem(DOSES_KEY, JSON.stringify(doses)); }
 
 const pad = n => String(n).padStart(2, '0');
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-function fmt(ts) {
-  const d = new Date(ts);
-  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-function remainStr(ms) {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  return `${Math.floor(s/3600)}:${pad(Math.floor(s/60)%60)}:${pad(s%60)}`;
-}
+const norm = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+function fmt(ts) { const d = new Date(ts); return `${d.getDate()} ${MONTHS[d.getMonth()]} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+function remainStr(ms) { const s = Math.max(0, Math.floor(ms/1000)); return `${Math.floor(s/3600)}:${pad(Math.floor(s/60)%60)}:${pad(s%60)}`; }
 function lastDose(medId) { return doses.find(d => d.medId === medId); }
+function dosesIn24h(medId) { const t = Date.now() - DAY; return doses.filter(d => d.medId === medId && d.takenAt >= t).length; }
+function mgIn24h(medId)   { const t = Date.now() - DAY; return doses.filter(d => d.medId === medId && d.takenAt >= t).reduce((s,d) => s + (d.dose || 0), 0); }
+
+function doseLabel(d) {
+  if (d.tablets != null && d.dose != null) return `${d.tablets} tab (${d.dose}mg)`;
+  if (d.tablets != null) return `${d.tablets} tab`;
+  if (d.dose != null) return `${d.dose}mg`;
+  return '';
+}
+function medDoseLabel(m) {
+  if (m.strength != null) return `${m.tablets ?? 1} × ${m.strength}mg`;
+  if (m.dose != null) return `${m.dose}mg`;
+  return '';
+}
 
 function toast(msg) {
-  const t = $('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  clearTimeout(t._h);
-  t._h = setTimeout(() => t.classList.remove('show'), 2600);
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-/* In-app dialog. Returns: null (cancel), 'extra' (extra button), true (ok, no inputs),
-   or array of input values (ok, with inputs). */
+/* Generic dialog. inputs: [{label?, type?, value?, placeholder?, options?}].
+   type 'select' uses options [{value,label}]. Resolves null|'extra'|true|[values]. */
 function dialog({ title, message = '', inputs = [], okText = 'OK', cancelText = 'Cancel', danger = false, extraText = null }) {
   return new Promise(resolve => {
     const ov = document.createElement('div');
     ov.className = 'overlay';
+    const field = (f, i) => {
+      const lbl = f.label ? `<div class="dlg-label">${esc(f.label)}</div>` : '';
+      if (f.type === 'select')
+        return lbl + `<select class="dlg-in" id="dlg-in-${i}">` +
+          f.options.map(o => `<option value="${esc(o.value)}" ${o.value === f.value ? 'selected' : ''}>${esc(o.label)}</option>`).join('') + `</select>`;
+      if (f.type === 'textarea')
+        return lbl + `<textarea class="dlg-in" id="dlg-in-${i}" placeholder="${esc(f.placeholder || '')}"></textarea>`;
+      return lbl + `<input class="dlg-in" id="dlg-in-${i}" type="text" ${f.type === 'number' ? 'inputmode="decimal"' : ''} placeholder="${esc(f.placeholder || '')}" value="${esc(f.value ?? '')}">`;
+    };
     ov.innerHTML = `<div class="sheet">
       <div class="dlg-title">${esc(title)}</div>
       ${message ? `<div class="dlg-msg">${esc(message)}</div>` : ''}
-      ${inputs.map((f, i) => f.type === 'textarea'
-        ? `<textarea class="dlg-in" id="dlg-in-${i}" placeholder="${esc(f.placeholder || '')}"></textarea>`
-        : `<input class="dlg-in" id="dlg-in-${i}" type="text" ${f.type === 'number' ? 'inputmode="decimal"' : ''}
-             placeholder="${esc(f.placeholder || '')}" value="${esc(f.value ?? '')}">`).join('')}
+      ${inputs.map(field).join('')}
       <div class="dlg-row">
         <button class="dlg-btn dlg-cancel">${esc(cancelText)}</button>
         <button class="dlg-btn dlg-ok${danger ? ' danger' : ''}">${esc(okText)}</button>
@@ -190,22 +212,25 @@ function painColor(n) {
   return `rgb(${mix(0)},${mix(1)},${mix(2)})`;
 }
 
-// Combined dose + pain logger.
-// Resolves: null (cancel) or { dose: number|undefined, pain: number|undefined }.
-// Commits when a pain chip is tapped (logs with that pain) or "Log, no pain rating".
+// Combined dose + pain logger. Resolves null (cancel) or { tablets?, dose?, pain? }.
 function logDialog(med) {
   const last = lastDose(med.id);
-  const prefill = last && last.dose != null ? last.dose
-                : med.dose != null ? med.dose : '';
+  const tabletMode = med.strength != null;
+  const prefill = tabletMode
+    ? (last && last.tablets != null ? last.tablets : (med.tablets ?? 1))
+    : (last && last.dose != null ? last.dose : (med.dose ?? ''));
   return new Promise(resolve => {
     const ov = document.createElement('div');
     ov.className = 'overlay';
     const chips = Array.from({ length: 11 }, (_, n) =>
       `<button class="pain-chip" style="background:${painColor(n)}" data-pain="${n}">${n}</button>`).join('');
+    const ctx = [med.reason, med.note].filter(Boolean).join(' · ');
     ov.innerHTML = `<div class="sheet">
       <div class="dlg-title">Log ${esc(med.name)}</div>
-      <div class="dlg-label">Dosage (mg)</div>
-      <input class="dlg-in" id="dlg-dose" inputmode="decimal" placeholder="e.g. 500" value="${esc(prefill)}">
+      ${ctx ? `<div class="dlg-msg">${esc(ctx)}</div>` : ''}
+      <div class="dlg-label">${tabletMode ? 'Number of tablets' : 'Dosage (mg)'}</div>
+      <input class="dlg-in" id="dlg-amt" inputmode="decimal" placeholder="${tabletMode ? 'e.g. 2' : 'e.g. 5'}" value="${esc(prefill)}">
+      ${tabletMode ? `<div class="dlg-total" id="dlg-total"></div>` : ''}
       <div class="dlg-label">Pain level — tap a number to log (0 = none, 10 = worst)</div>
       <div class="pain-grid">${chips}</div>
       <div class="dlg-row">
@@ -214,15 +239,20 @@ function logDialog(med) {
       </div>
     </div>`;
     document.body.appendChild(ov);
-    const readDose = () => {
-      const v = parseFloat(ov.querySelector('#dlg-dose').value);
-      return isFinite(v) && v >= 0 ? v : undefined;
+    const amt = ov.querySelector('#dlg-amt');
+    const totalEl = ov.querySelector('#dlg-total');
+    const upd = () => { if (totalEl) { const t = parseFloat(amt.value); totalEl.textContent = isFinite(t) ? `= ${t * med.strength}mg (${med.strength}mg each)` : ''; } };
+    amt.addEventListener('input', upd); upd();
+    const read = () => {
+      const v = parseFloat(amt.value);
+      if (!(isFinite(v) && v >= 0)) return {};
+      return tabletMode ? { tablets: v, dose: v * med.strength } : { dose: v };
     };
     const done = v => { ov.remove(); resolve(v); };
     ov.querySelectorAll('.pain-chip').forEach(b =>
-      b.addEventListener('click', () => done({ dose: readDose(), pain: +b.dataset.pain })));
+      b.addEventListener('click', () => done({ ...read(), pain: +b.dataset.pain })));
     ov.querySelector('.dlg-cancel').addEventListener('click', () => done(null));
-    ov.querySelector('.dlg-skip').addEventListener('click', () => done({ dose: readDose(), pain: undefined }));
+    ov.querySelector('.dlg-skip').addEventListener('click', () => done({ ...read(), pain: undefined }));
     ov.addEventListener('click', e => { if (e.target === ov) done(null); });
   });
 }
@@ -230,103 +260,110 @@ function logDialog(med) {
 async function takeDose(medId) {
   const m = meds.find(x => x.id === medId);
   if (!m) return;
-  const last = lastDose(medId);
   const now = Date.now();
+  const last = lastDose(medId);
+  const warnings = [];
   if (last) {
     const nextAt = last.takenAt + m.hours * 3600e3;
-    if (now < nextAt) {
-      const ok = await dialog({
-        title: `⚠️ ${m.name} isn't due yet`,
-        message: `Next dose in ${remainStr(nextAt - now)} (at ${fmt(nextAt)}).\nLog this dose anyway?`,
-        okText: 'Log anyway', danger: true,
-      });
+    if (now < nextAt) warnings.push(`Not due for ${remainStr(nextAt - now)} (next at ${fmt(nextAt)}).`);
+  }
+  if (m.maxPerDay && m.maxPerDay.doses != null) {
+    const c = dosesIn24h(medId);
+    if (c >= m.maxPerDay.doses) warnings.push(`Already had ${c} in the last 24h — your limit is ${m.maxPerDay.doses}.`);
+  }
+  if (warnings.length) {
+    const ok = await dialog({ title: `⚠️ ${m.name}`, message: warnings.join('\n') + '\n\nLog this dose anyway?', okText: 'Log anyway', danger: true });
+    if (ok !== true) return;
+  }
+  const res = await logDialog(m);
+  if (res === null) return;
+  if (m.maxPerDay && m.maxPerDay.mg != null && res.dose != null) {
+    const sum = mgIn24h(medId) + res.dose;
+    if (sum > m.maxPerDay.mg) {
+      const ok = await dialog({ title: `⚠️ ${m.name} daily limit`,
+        message: `This brings you to ${sum}mg in the last 24h — your limit is ${m.maxPerDay.mg}mg.\n\nLog anyway?`, okText: 'Log anyway', danger: true });
       if (ok !== true) return;
     }
   }
-  const res = await logDialog(m);
-  if (res === null) return;                  // cancelled — don't log
   const takenAt = Date.now();
-  const entry = { id: takenAt + '-' + Math.random().toString(36).slice(2, 7),
-                  medId, name: m.name, hours: m.hours, takenAt };
+  const entry = { id: takenAt + '-' + Math.random().toString(36).slice(2, 7), medId, name: m.name, hours: m.hours, takenAt };
+  if (res.tablets != null) entry.tablets = res.tablets;
+  if (res.dose != null) entry.dose = res.dose;
   if (res.pain != null) entry.pain = res.pain;
-  if (res.dose != null) { entry.dose = res.dose; m.dose = res.dose; saveMeds(); }
+  // remember last amount as the default for next time
+  if (res.tablets != null) { m.tablets = res.tablets; saveMeds(); }
+  else if (res.dose != null && m.strength == null) { m.dose = res.dose; saveMeds(); }
   doses.unshift(entry);
   saveDoses();
   render();
-  const parts = [];
-  if (res.dose != null) parts.push(`${res.dose}mg`);
-  if (res.pain != null) parts.push(`pain ${res.pain}/10`);
-  const note = parts.length ? ` (${parts.join(', ')})` : '';
-  toast(`${m.name} logged${note} — next dose at ${fmt(takenAt + m.hours * 3600e3)}`);
+  const dl = doseLabel(entry);
+  const bits = [dl, res.pain != null ? `pain ${res.pain}/10` : ''].filter(Boolean).join(', ');
+  toast(`${m.name} logged${bits ? ` (${bits})` : ''} — next dose at ${fmt(takenAt + m.hours * 3600e3)}`);
+}
+
+function medFormInputs(m) {
+  return [
+    { label: 'Name', value: m?.name ?? '', placeholder: 'e.g. Ibuprofen' },
+    { label: 'Type', type: 'select', value: m?.category ?? 'scheduled',
+      options: [{ value: 'scheduled', label: 'Scheduled' }, { value: 'prn', label: 'As needed (PRN)' }] },
+    { label: 'Hours between doses', type: 'number', value: m?.hours ?? '', placeholder: 'e.g. 8' },
+    { label: 'What it’s for (optional)', value: m?.reason ?? '', placeholder: 'e.g. Pain' },
+    { label: 'mg per tablet (optional — leave blank to log in mg)', type: 'number', value: m?.strength ?? '', placeholder: 'e.g. 200' },
+    { label: 'Tablets per dose (optional)', type: 'number', value: m?.tablets ?? '', placeholder: 'e.g. 2' },
+    { label: 'Max per day (doses, optional)', type: 'number', value: m?.maxPerDay?.doses ?? '', placeholder: 'e.g. 3' },
+  ];
+}
+function readMedForm(r) {
+  const name = r[0].trim();
+  const category = r[1] === 'prn' ? 'prn' : 'scheduled';
+  const hours = parseFloat(r[2]);
+  const reason = r[3].trim();
+  const strength = parseFloat(r[4]);
+  const tablets = parseFloat(r[5]);
+  const maxDoses = parseFloat(r[6]);
+  if (!name) { toast('Name is required'); return null; }
+  if (!(hours > 0 && hours <= 168)) { toast('Hours must be between 0 and 168'); return null; }
+  const out = { name, category, hours };
+  if (reason) out.reason = reason;
+  if (isFinite(strength) && strength > 0) out.strength = strength;
+  if (isFinite(tablets) && tablets > 0) out.tablets = tablets;
+  if (isFinite(maxDoses) && maxDoses > 0) out.maxPerDay = { doses: maxDoses };
+  return out;
 }
 
 async function addMed() {
-  const r = await dialog({
-    title: 'Add medication',
-    inputs: [{ placeholder: 'Name (e.g. Nurofen)' },
-             { placeholder: 'Hours between doses', type: 'number' },
-             { placeholder: 'Usual dosage in mg (optional)', type: 'number' }],
-    okText: 'Add',
-  });
+  const r = await dialog({ title: 'Add medication', inputs: medFormInputs(null), okText: 'Add' });
   if (!r) return;
-  const name = r[0].trim();
-  const hours = parseFloat(r[1]);
-  const dose = parseFloat(r[2]);
-  if (!name) { toast('Name is required'); return; }
-  if (!(hours > 0 && hours <= 168)) { toast('Hours must be between 0 and 168'); return; }
-  const med = { id: Date.now().toString(36), name, hours };
-  if (isFinite(dose) && dose >= 0) med.dose = dose;
-  meds.push(med);
-  saveMeds();
-  render();
-  toast(`${name} added — every ${hours}h`);
+  const data = readMedForm(r);
+  if (!data) return;
+  meds.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), ...data });
+  saveMeds(); render();
+  toast(`${data.name} added`);
 }
 
 async function editMed(medId) {
   const m = meds.find(x => x.id === medId);
   if (!m) return;
-  const r = await dialog({
-    title: `Edit ${m.name}`,
-    inputs: [{ value: m.name, placeholder: 'Name' },
-             { value: m.hours, placeholder: 'Hours between doses', type: 'number' },
-             { value: m.dose ?? '', placeholder: 'Usual dosage in mg (optional)', type: 'number' }],
-    okText: 'Save', extraText: `Delete ${m.name}…`,
-  });
+  const r = await dialog({ title: `Edit ${m.name}`, inputs: medFormInputs(m), okText: 'Save', extraText: `Delete ${m.name}…` });
   if (!r) return;
   if (r === 'extra') {
-    const sure = await dialog({
-      title: `Delete ${m.name}?`,
-      message: 'Its history entries are kept.',
-      okText: 'Delete', danger: true,
-    });
-    if (sure === true) {
-      meds = meds.filter(x => x.id !== medId);
-      saveMeds(); render();
-    }
+    const sure = await dialog({ title: `Delete ${m.name}?`, message: 'Its history entries are kept.', okText: 'Delete', danger: true });
+    if (sure === true) { meds = meds.filter(x => x.id !== medId); saveMeds(); render(); }
     return;
   }
-  const name = r[0].trim();
-  const hours = parseFloat(r[1]);
-  const dose = parseFloat(r[2]);
-  if (!name) { toast('Name is required'); return; }
-  if (!(hours > 0 && hours <= 168)) { toast('Hours must be between 0 and 168'); return; }
-  m.name = name; m.hours = hours;
-  if (isFinite(dose) && dose >= 0) m.dose = dose; else delete m.dose;
+  const data = readMedForm(r);
+  if (!data) return;
+  Object.assign(m, { reason: undefined, strength: undefined, tablets: undefined, maxPerDay: undefined }, data);
+  // keep a remembered mg default for mg-based meds
+  if (m.strength != null) delete m.dose;
   saveMeds(); render();
 }
 
 async function delDose(doseId) {
   const d = doses.find(x => x.id === doseId);
   if (!d) return;
-  const sure = await dialog({
-    title: 'Remove log entry?',
-    message: `${d.name} · ${fmt(d.takenAt)}`,
-    okText: 'Remove', danger: true,
-  });
-  if (sure === true) {
-    doses = doses.filter(x => x.id !== doseId);
-    saveDoses(); render();
-  }
+  const sure = await dialog({ title: 'Remove log entry?', message: `${d.name} · ${fmt(d.takenAt)}`, okText: 'Remove', danger: true });
+  if (sure === true) { doses = doses.filter(x => x.id !== doseId); saveDoses(); render(); }
 }
 
 function calAlert(medId) {
@@ -346,56 +383,82 @@ function calAlert(medId) {
   document.body.appendChild(a); a.click(); a.remove();
 }
 
+// ---- one-time / on-demand load of the standard medication list (non-destructive) ----
+function loadStarterMeds() {
+  let added = 0, updated = 0;
+  for (const s of STARTER_MEDS) {
+    const keys = [s.id, ...(s.aliases || [])].map(norm);
+    const existing = meds.find(m => keys.includes(norm(m.id)) || keys.includes(norm(m.name)));
+    const fields = cleanMed(s);
+    if (existing) {
+      delete fields.id;            // keep the existing id so history + countdown stay linked
+      Object.assign(existing, fields);
+      updated++;
+    } else {
+      meds.push(fields);
+      added++;
+    }
+  }
+  saveMeds(); render();
+  toast(`Standard list loaded — ${added} added, ${updated} updated. History kept.`);
+}
+
+async function starterPrompt(manual) {
+  const ok = await dialog({
+    title: manual ? 'Load standard medication list?' : 'Set up your full medication list?',
+    message: 'Adds your Scheduled meds (Coloxyl, Ibuprofen, Targin, Paracetamol, Pantoprazole) and '
+      + 'PRN meds (Metoclopramide, Ondansetron, Endone, Tapentadol). Existing medications are updated to match, '
+      + 'and all your history is kept.',
+    okText: 'Set up', cancelText: 'Not now',
+  });
+  localStorage.setItem(SEED_FLAG, '1');
+  if (ok === true) loadStarterMeds();
+}
+
+function exportLog() {
+  if (!doses.length) { toast('No doses logged yet'); return; }
+  const text = doses.map(d =>
+    `${fmt(d.takenAt)} — ${d.name} (every ${d.hours}h) — Next dose: ${fmt(d.takenAt + d.hours*3600e3)}` +
+    (doseLabel(d) ? ` — ${doseLabel(d)}` : '') +
+    (d.pain != null ? ` — Pain ${d.pain}/10` : '')
+  ).join('\n');
+  if (navigator.share) navigator.share({ title: 'Medication Log', text }).catch(() => {});
+  else navigator.clipboard.writeText(text).then(() => toast('Log copied to clipboard'));
+}
+
 function backupData() {
   const payload = JSON.stringify({ app: 'medtimer', v: 1, meds, doses });
   const finish = () => toast('Backup copied — paste into Restore on the other device');
-  if (navigator.share) {
-    navigator.share({ title: 'Med Timer backup', text: payload })
-      .catch(() => navigator.clipboard.writeText(payload).then(finish));
-  } else {
-    navigator.clipboard.writeText(payload).then(finish);
-  }
+  if (navigator.share) navigator.share({ title: 'Med Timer backup', text: payload }).catch(() => navigator.clipboard.writeText(payload).then(finish));
+  else navigator.clipboard.writeText(payload).then(finish);
 }
 
 async function restoreData() {
-  const r = await dialog({
-    title: 'Restore',
-    message: 'Paste a Backup (or lines from Share / Copy):',
-    inputs: [{ type: 'textarea', placeholder: 'Paste here' }],
-    okText: 'Restore',
-  });
+  const r = await dialog({ title: 'Restore', message: 'Paste a Backup (or lines from Share / Copy):',
+    inputs: [{ type: 'textarea', placeholder: 'Paste here' }], okText: 'Restore' });
   if (!r || !r[0].trim()) return;
   const txt = r[0].trim();
   try {
     if (txt.startsWith('{')) {
       const b = JSON.parse(txt);
       if (b.app !== 'medtimer' || !Array.isArray(b.meds) || !Array.isArray(b.doses)) throw 0;
-      const sure = await dialog({
-        title: 'Replace current data?',
-        message: `This backup has ${b.meds.length} medications and ${b.doses.length} log entries.`,
-        okText: 'Replace', danger: true,
-      });
+      const sure = await dialog({ title: 'Replace current data?',
+        message: `This backup has ${b.meds.length} medications and ${b.doses.length} log entries.`, okText: 'Replace', danger: true });
       if (sure !== true) return;
       meds = b.meds; doses = b.doses;
     } else {
       const items = parseLogLines(txt);
       if (!items.length) throw 0;
-      const sure = await dialog({
-        title: `Import ${items.length} log entr${items.length === 1 ? 'y' : 'ies'}?`,
-        message: "They'll be merged with what's already here.",
-        okText: 'Import',
-      });
+      const sure = await dialog({ title: `Import ${items.length} log entr${items.length === 1 ? 'y' : 'ies'}?`,
+        message: "They'll be merged with what's already here.", okText: 'Import' });
       if (sure !== true) return;
       mergeImported(items);
     }
     saveMeds(); saveDoses(); render();
     toast('Restore complete');
-  } catch {
-    toast("Couldn't read that — paste the exact Backup or Share / Copy text");
-  }
+  } catch { toast("Couldn't read that — paste the exact Backup or Share / Copy text"); }
 }
 
-// accepts shared-log lines like "12 Jun 18:34 — Targin (every 12h) — Next dose: ..."
 function parseLogLines(txt) {
   const re = /^(\d{1,2}) (\w{3}) (\d{2}):(\d{2}) — (.+?) \(every ([\d.]+)h\)/;
   const out = [];
@@ -405,10 +468,12 @@ function parseLogLines(txt) {
     const mi = MONTHS.indexOf(m[2]);
     if (mi < 0) continue;
     const d = new Date(new Date().getFullYear(), mi, +m[1], +m[3], +m[4]);
-    if (d.getTime() > Date.now() + 86400e3) d.setFullYear(d.getFullYear() - 1);
+    if (d.getTime() > Date.now() + DAY) d.setFullYear(d.getFullYear() - 1);
     const item = { name: m[5], hours: parseFloat(m[6]), takenAt: d.getTime() };
-    const dm = line.match(/—\s*(\d+(?:\.\d+)?)\s*mg\b/i);
-    if (dm) item.dose = parseFloat(dm[1]);
+    const tabM = line.match(/(\d+(?:\.\d+)?)\s*tab\b/i);
+    if (tabM) item.tablets = parseFloat(tabM[1]);
+    const mgM = line.match(/(\d+(?:\.\d+)?)\s*mg\b/i);
+    if (mgM) item.dose = parseFloat(mgM[1]);
     const pm = line.match(/Pain (\d+)\/10/i);
     if (pm) item.pain = +pm[1];
     out.push(item);
@@ -420,13 +485,13 @@ function mergeImported(items) {
   for (const it of items) {
     let med = meds.find(x => x.name.toLowerCase() === it.name.toLowerCase());
     if (!med) {
-      med = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: it.name, hours: it.hours };
+      med = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: it.name, hours: it.hours, category: 'scheduled' };
       meds.push(med);
     }
     const dup = doses.some(d => d.medId === med.id && Math.abs(d.takenAt - it.takenAt) < 60e3);
     if (!dup) {
-      const entry = { id: it.takenAt + '-' + Math.random().toString(36).slice(2, 7),
-                      medId: med.id, name: med.name, hours: it.hours, takenAt: it.takenAt };
+      const entry = { id: it.takenAt + '-' + Math.random().toString(36).slice(2, 7), medId: med.id, name: med.name, hours: it.hours, takenAt: it.takenAt };
+      if (it.tablets != null) entry.tablets = it.tablets;
       if (it.dose != null) entry.dose = it.dose;
       if (it.pain != null) entry.pain = it.pain;
       doses.push(entry);
@@ -435,65 +500,75 @@ function mergeImported(items) {
   doses.sort((a, b) => b.takenAt - a.takenAt);
 }
 
-function exportLog() {
-  if (!doses.length) { toast('No doses logged yet'); return; }
-  const text = doses.map(d =>
-    `${fmt(d.takenAt)} — ${d.name} (every ${d.hours}h) — Next dose: ${fmt(d.takenAt + d.hours*3600e3)}` +
-    (d.dose != null ? ` — ${d.dose}mg` : '') +
-    (d.pain != null ? ` — Pain ${d.pain}/10` : '')
-  ).join('\n');
-  if (navigator.share) {
-    navigator.share({ title: 'Medication Log', text }).catch(() => {});
+function medCard(m) {
+  const now = Date.now();
+  const last = lastDose(m.id);
+  let cd, sub;
+  if (!last) {
+    cd = `<div class="countdown cd-none">No doses logged yet</div>`;
+    sub = `Tap Take when you take it`;
   } else {
-    navigator.clipboard.writeText(text).then(() => toast('Log copied to clipboard'));
+    const nextAt = last.takenAt + m.hours * 3600e3;
+    const dl = doseLabel(last) ? ` · ${doseLabel(last)}` : '';
+    const pn = last.pain != null ? ` · pain ${last.pain}/10` : '';
+    if (now >= nextAt) {
+      cd = `<div class="countdown cd-ok">✅ OK to take now</div>`;
+      sub = `Was due ${fmt(nextAt)} · last taken ${fmt(last.takenAt)}${dl}${pn}`;
+    } else {
+      cd = `<div class="countdown cd-wait" data-next="${nextAt}">${remainStr(nextAt - now)}</div>`;
+      sub = `Next dose ${fmt(nextAt)} · last taken ${fmt(last.takenAt)}${dl}${pn}`;
+    }
   }
+  // 24h tally vs the med's stated limit
+  let tally = '';
+  if (m.maxPerDay && m.maxPerDay.mg != null) {
+    const s = mgIn24h(m.id), over = s > m.maxPerDay.mg, warn = s >= m.maxPerDay.mg;
+    tally = `<div class="tally${over ? ' over' : warn ? ' warn' : ''}">Last 24h: ${s} / ${m.maxPerDay.mg} mg</div>`;
+  } else if (m.maxPerDay && m.maxPerDay.doses != null) {
+    const c = dosesIn24h(m.id), over = c > m.maxPerDay.doses, warn = c >= m.maxPerDay.doses;
+    tally = `<div class="tally${over ? ' over' : warn ? ' warn' : ''}">Last 24h: ${c} / ${m.maxPerDay.doses} dose${m.maxPerDay.doses === 1 ? '' : 's'}</div>`;
+  } else {
+    const c = dosesIn24h(m.id);
+    if (c > 0) tally = `<div class="tally">Last 24h: ${c} dose${c === 1 ? '' : 's'}</div>`;
+  }
+  const reasonLine = [m.reason, m.note].filter(Boolean).join(' · ');
+  const badge = medDoseLabel(m);
+  const calBtn = last && now < last.takenAt + m.hours*3600e3
+    ? `<button class="cal-btn" onclick="calAlert('${m.id}')">📅 Alert</button>` : '';
+  return `<div class="card">
+    <div class="med-top">
+      <div>
+        <div class="med-name">${esc(m.name)}</div>
+        <span class="badge">${badge ? esc(badge) + ' · ' : ''}every ${m.hours}h</span>
+        ${reasonLine ? `<div class="reason">${esc(reasonLine)}</div>` : ''}
+      </div>
+      <button class="edit-btn" onclick="editMed('${m.id}')">✎</button>
+    </div>
+    ${cd}<div class="sub">${sub}</div>${tally}
+    <div class="row">
+      <button class="take-btn" onclick="takeDose('${m.id}')">TAKE ${esc(m.name.toUpperCase())}</button>
+      ${calBtn}
+    </div>
+  </div>`;
 }
 
 function render() {
-  const now = Date.now();
-  $('meds').innerHTML = meds.map(m => {
-    const last = lastDose(m.id);
-    let cd, sub;
-    if (!last) {
-      cd = `<div class="countdown cd-none">No doses logged yet</div>`;
-      sub = `Tap Take when you take it`;
-    } else {
-      const nextAt = last.takenAt + m.hours * 3600e3;
-      const doseSub = last.dose != null ? ` · ${last.dose}mg` : '';
-      const painSub = last.pain != null ? ` · pain ${last.pain}/10` : '';
-      if (now >= nextAt) {
-        cd = `<div class="countdown cd-ok">✅ OK to take now</div>`;
-        sub = `Was due ${fmt(nextAt)} · last taken ${fmt(last.takenAt)}${doseSub}${painSub}`;
-      } else {
-        cd = `<div class="countdown cd-wait" data-next="${nextAt}">${remainStr(nextAt - now)}</div>`;
-        sub = `Next dose ${fmt(nextAt)} · last taken ${fmt(last.takenAt)}${doseSub}${painSub}`;
-      }
-    }
-    const calBtn = last && now < last.takenAt + m.hours*3600e3
-      ? `<button class="cal-btn" onclick="calAlert('${m.id}')">📅 Alert</button>` : '';
-    return `<div class="card">
-      <div class="med-top">
-        <div class="med-name">${esc(m.name)} <span class="badge">${m.dose != null ? esc(m.dose) + 'mg · ' : ''}every ${m.hours}h</span></div>
-        <button class="edit-btn" onclick="editMed('${m.id}')">✎</button>
-      </div>
-      ${cd}<div class="sub">${sub}</div>
-      <div class="row">
-        <button class="take-btn" onclick="takeDose('${m.id}')">TAKE ${esc(m.name.toUpperCase())} NOW</button>
-        ${calBtn}
-      </div>
-    </div>`;
-  }).join('') || `<div class="empty">No medications — tap ＋ Add</div>`;
+  const sched = meds.filter(m => m.category !== 'prn');
+  const prn = meds.filter(m => m.category === 'prn');
+  let html = '';
+  if (sched.length) html += `<div class="section">Scheduled</div>` + sched.map(medCard).join('');
+  if (prn.length) html += `<div class="section">As needed (PRN)</div>` + prn.map(medCard).join('');
+  $('meds').innerHTML = html || `<div class="empty">No medications — tap ＋ Add</div>`;
 
   $('log').innerHTML = doses.slice(0, 200).map(d => {
-    const doseStr = d.dose != null ? ` · ${d.dose}mg` : '';
-    const painStr = d.pain != null ? ` · <b style="color:${painColor(d.pain)}">pain ${d.pain}/10</b>` : '';
-    return `<div class="log-entry"><div><b>${esc(d.name)}</b> <span class="when">· ${fmt(d.takenAt)} · every ${d.hours}h${doseStr}${painStr}</span><br>
+    const dl = doseLabel(d) ? ` · ${doseLabel(d)}` : '';
+    const pn = d.pain != null ? ` · <b style="color:${painColor(d.pain)}">pain ${d.pain}/10</b>` : '';
+    return `<div class="log-entry"><div><b>${esc(d.name)}</b> <span class="when">· ${fmt(d.takenAt)} · every ${d.hours}h${dl}${pn}</span><br>
      Next dose: ${fmt(d.takenAt + d.hours*3600e3)}</div>
      <button class="del" onclick="delDose('${d.id}')">✕</button></div>`;
   }).join('') || `<div class="empty">Doses you log will appear here</div>`;
 }
 
-// per-second tick: update countdown text only; full render when one expires
 setInterval(() => {
   const now = Date.now();
   let needFull = false;
@@ -507,6 +582,9 @@ setInterval(() => {
 
 render();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+
+// existing installs (had data before this version) get a one-time offer to load the full list
+if (!freshInstall && !localStorage.getItem(SEED_FLAG)) starterPrompt(false);
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
