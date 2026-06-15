@@ -97,7 +97,10 @@
 </style>
 </head>
 <body>
-<h1>💊 Med Timer <button class="add-btn" onclick="addMed()">＋ Add</button></h1>
+<h1>💊 Med Timer <span style="display:flex;gap:8px">
+  <button class="add-btn" id="syncBtn" onclick="openSync()">☁️ Sync</button>
+  <button class="add-btn" onclick="addMed()">＋ Add</button>
+</span></h1>
 <div id="meds"></div>
 <button class="footer-btn" onclick="starterPrompt(true)">↺ Load standard medication list</button>
 <h2>History <span class="actions">
@@ -108,6 +111,9 @@
 <div id="log"></div>
 <div class="toast" id="toast"></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const MEDS_KEY = 'mt.meds', DOSES_KEY = 'mt.doses', SEED_FLAG = 'mt.starterV2';
@@ -130,6 +136,14 @@ const STARTER_MEDS = [
 ];
 const cleanMed = m => { const c = { ...m }; delete c.aliases; return c; };
 
+// sync state — declared up here so saveMeds()->scheduleSync() during first-run seeding is safe
+const SYNC_KEY = 'mt.syncCode', DEV_KEY = 'mt.deviceId';
+let deviceId = localStorage.getItem(DEV_KEY);
+if (!deviceId) { deviceId = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem(DEV_KEY, deviceId); }
+let syncCode = localStorage.getItem(SYNC_KEY) || '';
+let db = null, roomRef = null, cryptoKey = null, syncReady = false;
+let lastSyncJson = '', syncTimer = null, syncState = 'off';
+
 let freshInstall = false;
 let meds = JSON.parse(localStorage.getItem(MEDS_KEY) || 'null');
 if (!meds) {
@@ -140,8 +154,8 @@ if (!meds) {
 }
 let doses = JSON.parse(localStorage.getItem(DOSES_KEY) || '[]'); // newest first
 
-function saveMeds()  { localStorage.setItem(MEDS_KEY, JSON.stringify(meds)); }
-function saveDoses() { localStorage.setItem(DOSES_KEY, JSON.stringify(doses)); }
+function saveMeds()  { localStorage.setItem(MEDS_KEY, JSON.stringify(meds)); scheduleSync(); }
+function saveDoses() { localStorage.setItem(DOSES_KEY, JSON.stringify(doses)); scheduleSync(); }
 
 const pad = n => String(n).padStart(2, '0');
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -580,11 +594,197 @@ setInterval(() => {
   if (needFull) render();
 }, 1000);
 
+/* =================== Encrypted cloud sync (Firebase RTDB) ===================
+   Data is AES-GCM encrypted on-device with a key derived from the share code,
+   and stored under a path that is a hash of that code — so without the code you
+   can neither find nor read it. Both devices using the same code stay in sync. */
+const _te = new TextEncoder(), _td = new TextDecoder();
+const _b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const _unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+async function deriveKey(code) {
+  const base = await crypto.subtle.importKey('raw', _te.encode(code), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name:'PBKDF2', salt:_te.encode('medtimer-sync-v1'), iterations:150000, hash:'SHA-256' },
+    base, { name:'AES-GCM', length:256 }, false, ['encrypt','decrypt']);
+}
+async function sha256hex(s) {
+  const h = await crypto.subtle.digest('SHA-256', _te.encode(s));
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2,'0')).join('');
+}
+async function encryptObj(obj) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name:'AES-GCM', iv }, cryptoKey, _te.encode(JSON.stringify(obj)));
+  return { iv:_b64(iv), ct:_b64(ct) };
+}
+async function decryptObj(rec) {
+  const pt = await crypto.subtle.decrypt({ name:'AES-GCM', iv:_unb64(rec.iv) }, cryptoKey, _unb64(rec.ct));
+  return JSON.parse(_td.decode(pt));
+}
+function genCode() {
+  const al = 'abcdefghjkmnpqrstuvwxyz23456789';   // no ambiguous chars
+  const a = new Uint8Array(12); crypto.getRandomValues(a);
+  const s = [...a].map(x => al[x % al.length]).join('');
+  return `${s.slice(0,4)}-${s.slice(4,8)}-${s.slice(8,12)}`;
+}
+
+function setSyncState(s) {
+  syncState = s;
+  const btn = document.getElementById('syncBtn');
+  if (!btn) return;
+  const map = { off:'☁️ Sync', connecting:'☁️ …', synced:'☁️ On', error:'☁️ !' };
+  btn.textContent = map[s] || '☁️ Sync';
+  btn.style.color = s === 'synced' ? 'var(--green)' : s === 'error' ? 'var(--red)' : 'var(--blue)';
+}
+
+function scheduleSync() {
+  if (!syncReady) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(pushNow, 700);
+}
+async function pushNow() {
+  if (!syncReady || !roomRef || !cryptoKey) return;
+  const j = JSON.stringify({ meds, doses });
+  if (j === lastSyncJson) return;             // nothing new since last sync
+  lastSyncJson = j;
+  try {
+    const enc = await encryptObj({ meds, doses });
+    await roomRef.set({ ...enc, ts: Date.now(), by: deviceId });
+  } catch (e) { setSyncState('error'); }
+}
+
+function applyRemote(remote, ts) {
+  if (!remote || typeof remote !== 'object') return;
+  const byId = new Map((doses || []).map(d => [d.id, d]));
+  let changed = false;
+  for (const d of (remote.doses || [])) if (!byId.has(d.id)) { byId.set(d.id, d); changed = true; }
+  const mergedDoses = [...byId.values()].sort((a, b) => b.takenAt - a.takenAt);
+  let mergedMeds = meds;
+  if (Array.isArray(remote.meds)) {
+    const ids = new Set(meds.map(m => m.id));
+    const extra = remote.meds.filter(m => !ids.has(m.id));
+    // remote is the latest writer -> adopt its med definitions, plus any local-only meds
+    mergedMeds = [...remote.meds, ...meds.filter(m => !new Set(remote.meds.map(x=>x.id)).has(m.id))];
+    if (extra.length || remote.meds.length !== meds.length || JSON.stringify(mergedMeds) !== JSON.stringify(meds)) changed = true;
+  }
+  if (changed || mergedDoses.length !== doses.length) {
+    meds = mergedMeds; doses = mergedDoses;
+    lastSyncJson = JSON.stringify({ meds, doses });   // prevent echo push
+    localStorage.setItem(MEDS_KEY, JSON.stringify(meds));
+    localStorage.setItem(DOSES_KEY, JSON.stringify(doses));
+    render();
+  }
+}
+
+async function syncConnect(code) {
+  code = (code || '').trim().toLowerCase();
+  if (!code) return false;
+  if (!window.firebase || !window.FIREBASE_CONFIG) { toast('Sync unavailable — check your connection'); return false; }
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(window.FIREBASE_CONFIG);
+    db = firebase.database();
+  } catch (e) { toast('Sync setup failed'); return false; }
+  cryptoKey = await deriveKey(code);
+  const roomId = await sha256hex('medtimer-room:' + code);
+  syncCode = code; localStorage.setItem(SYNC_KEY, code);
+  if (roomRef) roomRef.off();
+  roomRef = db.ref('rooms/' + roomId);
+  syncReady = true;
+  setSyncState('connecting');
+  let first = true;
+  roomRef.on('value', async snap => {
+    const rec = snap.val();
+    if (!rec || !rec.ct) { lastSyncJson = ''; await pushNow(); setSyncState('synced'); first = false; return; }
+    if (rec.by !== deviceId) {
+      try { applyRemote(await decryptObj(rec), rec.ts || 0); }
+      catch (e) { if (first) toast('Could not read synced data — is the code right?'); }
+    }
+    setSyncState('synced');
+    if (first) { first = false; await pushNow(); }   // contribute any local-only data after first pull
+  }, () => setSyncState('error'));
+  return true;
+}
+
+function syncDisconnect() {
+  if (roomRef) roomRef.off();
+  roomRef = null; syncReady = false; cryptoKey = null; syncCode = '';
+  localStorage.removeItem(SYNC_KEY);
+  setSyncState('off');
+}
+
+function syncSheet() {
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  const connected = syncReady && syncCode;
+  ov.innerHTML = `<div class="sheet">
+    <div class="dlg-title">☁️ Sync across devices</div>
+    ${connected ? `
+      <div class="dlg-msg">Synced. Share this code with anyone who should see and update your meds (e.g. your wife). On their phone they open this same app, tap Sync, and enter it.</div>
+      <div class="dlg-label">Your share code</div>
+      <input class="dlg-in" id="sync-code-show" readonly value="${esc(syncCode)}" style="font-size:22px;text-align:center;letter-spacing:2px;font-weight:700">
+      <div class="dlg-row">
+        <button class="dlg-btn dlg-cancel" id="sync-copy">Copy code</button>
+        <button class="dlg-btn dlg-ok" id="sync-share">Share…</button>
+      </div>
+      <button class="dlg-extra" id="sync-stop">Stop syncing on this device</button>
+    ` : `
+      <div class="dlg-msg">Turn on sync to keep your phones in step automatically — no backups. Your data is encrypted with your code before it leaves the device.</div>
+      <div class="dlg-row">
+        <button class="dlg-btn dlg-ok" id="sync-new">Turn on sync</button>
+      </div>
+      <div class="dlg-label" style="margin-top:14px">Already have a code? Enter it to connect</div>
+      <input class="dlg-in" id="sync-code-in" placeholder="xxxx-xxxx-xxxx" autocapitalize="off" autocorrect="off">
+      <div class="dlg-row">
+        <button class="dlg-btn dlg-cancel" id="sync-close">Close</button>
+        <button class="dlg-btn dlg-ok" id="sync-join">Connect</button>
+      </div>
+    `}
+  </div>`;
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+  if (connected) {
+    ov.querySelector('#sync-copy').onclick = () => { navigator.clipboard.writeText(syncCode).then(() => toast('Code copied')); };
+    ov.querySelector('#sync-share').onclick = () => {
+      const msg = `Open this to follow my meds: https://slinkyjoey.github.io/med-timer/  — then tap ☁️ Sync and enter code: ${syncCode}`;
+      if (navigator.share) navigator.share({ text: msg }).catch(() => {});
+      else navigator.clipboard.writeText(msg).then(() => toast('Share text copied'));
+    };
+    ov.querySelector('#sync-stop').onclick = async () => {
+      const sure = await dialog({ title: 'Stop syncing on this device?', message: 'Your data stays on this phone; it just stops updating across devices.', okText: 'Stop', danger: true });
+      if (sure === true) { syncDisconnect(); close(); toast('Sync turned off'); }
+    };
+  } else {
+    ov.querySelector('#sync-close').onclick = close;
+    ov.querySelector('#sync-new').onclick = async () => {
+      const code = genCode();
+      close();
+      const ok = await syncConnect(code);
+      if (ok) { setTimeout(syncSheet, 200); toast('Sync on — share your code'); }
+    };
+    ov.querySelector('#sync-join').onclick = async () => {
+      const code = ov.querySelector('#sync-code-in').value.trim();
+      if (!code) { toast('Enter a code'); return; }
+      close();
+      const ok = await syncConnect(code);
+      if (ok) toast('Connecting…');
+    };
+  }
+}
+function openSync() { syncSheet(); }
+
 render();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
 
 // existing installs (had data before this version) get a one-time offer to load the full list
 if (!freshInstall && !localStorage.getItem(SEED_FLAG)) starterPrompt(false);
+
+// reconnect sync automatically if this device already has a share code
+setSyncState(syncCode ? 'connecting' : 'off');
+if (syncCode) {
+  const tryConnect = () => window.firebase ? syncConnect(syncCode) : setTimeout(tryConnect, 300);
+  tryConnect();
+}
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>

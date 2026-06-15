@@ -1,5 +1,5 @@
-const CACHE = 'medtimer-v6';
-const ASSETS = ['./', './index.html', './manifest.json', './icon-180.png', './icon-512.png'];
+const CACHE = 'medtimer-v7';
+const ASSETS = ['./', './index.html', './manifest.json', './icon-180.png', './icon-512.png', './firebase-config.js'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
@@ -19,6 +19,8 @@ const withTimeout = (promise, ms) =>
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
+  // leave cross-origin requests (Firebase SDK, RTDB) entirely to the network
+  if (new URL(req.url).origin !== self.location.origin) return;
 
   if (req.mode === 'navigate') {
     // network-first for the page itself: updates arrive immediately, reload never
