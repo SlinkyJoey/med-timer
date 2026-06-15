@@ -98,6 +98,7 @@
   .dlg-ok.danger { background: var(--red); }
   .dlg-extra { background: none; border: none; color: var(--red); font-size: 15px; font-weight: 600; padding: 12px 0 2px; width: 100%; text-align: center; }
   .dlg-skip { background: var(--card); color: var(--text); }
+  .dlg-label { font-size: 13px; color: var(--dim); font-weight: 600; margin: 4px 0 6px; }
   .pain-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 2px 0 12px; }
   .pain-chip { border: none; border-radius: 12px; padding: 15px 0; font-size: 18px; font-weight: 700; color: #10151c; }
   .pain-chip:active { transform: scale(.94); }
@@ -189,28 +190,39 @@ function painColor(n) {
   return `rgb(${mix(0)},${mix(1)},${mix(2)})`;
 }
 
-// Pain picker. Resolves: null (cancel), 'skip' (no rating), or 0-10.
-function painDialog(medName) {
+// Combined dose + pain logger.
+// Resolves: null (cancel) or { dose: number|undefined, pain: number|undefined }.
+// Commits when a pain chip is tapped (logs with that pain) or "Log, no pain rating".
+function logDialog(med) {
+  const last = lastDose(med.id);
+  const prefill = last && last.dose != null ? last.dose
+                : med.dose != null ? med.dose : '';
   return new Promise(resolve => {
     const ov = document.createElement('div');
     ov.className = 'overlay';
     const chips = Array.from({ length: 11 }, (_, n) =>
       `<button class="pain-chip" style="background:${painColor(n)}" data-pain="${n}">${n}</button>`).join('');
     ov.innerHTML = `<div class="sheet">
-      <div class="dlg-title">Pain level — ${esc(medName)}</div>
-      <div class="dlg-msg">How bad is it right now? (0 = none, 10 = worst)</div>
+      <div class="dlg-title">Log ${esc(med.name)}</div>
+      <div class="dlg-label">Dosage (mg)</div>
+      <input class="dlg-in" id="dlg-dose" inputmode="decimal" placeholder="e.g. 500" value="${esc(prefill)}">
+      <div class="dlg-label">Pain level — tap a number to log (0 = none, 10 = worst)</div>
       <div class="pain-grid">${chips}</div>
       <div class="dlg-row">
         <button class="dlg-btn dlg-cancel">Cancel</button>
-        <button class="dlg-btn dlg-skip">No rating</button>
+        <button class="dlg-btn dlg-skip">Log, no pain rating</button>
       </div>
     </div>`;
     document.body.appendChild(ov);
+    const readDose = () => {
+      const v = parseFloat(ov.querySelector('#dlg-dose').value);
+      return isFinite(v) && v >= 0 ? v : undefined;
+    };
     const done = v => { ov.remove(); resolve(v); };
     ov.querySelectorAll('.pain-chip').forEach(b =>
-      b.addEventListener('click', () => done(+b.dataset.pain)));
+      b.addEventListener('click', () => done({ dose: readDose(), pain: +b.dataset.pain })));
     ov.querySelector('.dlg-cancel').addEventListener('click', () => done(null));
-    ov.querySelector('.dlg-skip').addEventListener('click', () => done('skip'));
+    ov.querySelector('.dlg-skip').addEventListener('click', () => done({ dose: readDose(), pain: undefined }));
     ov.addEventListener('click', e => { if (e.target === ov) done(null); });
   });
 }
@@ -231,31 +243,40 @@ async function takeDose(medId) {
       if (ok !== true) return;
     }
   }
-  const pain = await painDialog(m.name);
-  if (pain === null) return;                 // cancelled — don't log
+  const res = await logDialog(m);
+  if (res === null) return;                  // cancelled — don't log
   const takenAt = Date.now();
   const entry = { id: takenAt + '-' + Math.random().toString(36).slice(2, 7),
                   medId, name: m.name, hours: m.hours, takenAt };
-  if (pain !== 'skip') entry.pain = pain;
+  if (res.pain != null) entry.pain = res.pain;
+  if (res.dose != null) { entry.dose = res.dose; m.dose = res.dose; saveMeds(); }
   doses.unshift(entry);
   saveDoses();
   render();
-  const painNote = pain !== 'skip' ? ` (pain ${pain}/10)` : '';
-  toast(`${m.name} logged${painNote} — next dose at ${fmt(takenAt + m.hours * 3600e3)}`);
+  const parts = [];
+  if (res.dose != null) parts.push(`${res.dose}mg`);
+  if (res.pain != null) parts.push(`pain ${res.pain}/10`);
+  const note = parts.length ? ` (${parts.join(', ')})` : '';
+  toast(`${m.name} logged${note} — next dose at ${fmt(takenAt + m.hours * 3600e3)}`);
 }
 
 async function addMed() {
   const r = await dialog({
     title: 'Add medication',
-    inputs: [{ placeholder: 'Name (e.g. Nurofen)' }, { placeholder: 'Hours between doses', type: 'number' }],
+    inputs: [{ placeholder: 'Name (e.g. Nurofen)' },
+             { placeholder: 'Hours between doses', type: 'number' },
+             { placeholder: 'Usual dosage in mg (optional)', type: 'number' }],
     okText: 'Add',
   });
   if (!r) return;
   const name = r[0].trim();
   const hours = parseFloat(r[1]);
+  const dose = parseFloat(r[2]);
   if (!name) { toast('Name is required'); return; }
   if (!(hours > 0 && hours <= 168)) { toast('Hours must be between 0 and 168'); return; }
-  meds.push({ id: Date.now().toString(36), name, hours });
+  const med = { id: Date.now().toString(36), name, hours };
+  if (isFinite(dose) && dose >= 0) med.dose = dose;
+  meds.push(med);
   saveMeds();
   render();
   toast(`${name} added — every ${hours}h`);
@@ -266,7 +287,9 @@ async function editMed(medId) {
   if (!m) return;
   const r = await dialog({
     title: `Edit ${m.name}`,
-    inputs: [{ value: m.name, placeholder: 'Name' }, { value: m.hours, placeholder: 'Hours between doses', type: 'number' }],
+    inputs: [{ value: m.name, placeholder: 'Name' },
+             { value: m.hours, placeholder: 'Hours between doses', type: 'number' },
+             { value: m.dose ?? '', placeholder: 'Usual dosage in mg (optional)', type: 'number' }],
     okText: 'Save', extraText: `Delete ${m.name}…`,
   });
   if (!r) return;
@@ -284,9 +307,11 @@ async function editMed(medId) {
   }
   const name = r[0].trim();
   const hours = parseFloat(r[1]);
+  const dose = parseFloat(r[2]);
   if (!name) { toast('Name is required'); return; }
   if (!(hours > 0 && hours <= 168)) { toast('Hours must be between 0 and 168'); return; }
   m.name = name; m.hours = hours;
+  if (isFinite(dose) && dose >= 0) m.dose = dose; else delete m.dose;
   saveMeds(); render();
 }
 
@@ -382,6 +407,8 @@ function parseLogLines(txt) {
     const d = new Date(new Date().getFullYear(), mi, +m[1], +m[3], +m[4]);
     if (d.getTime() > Date.now() + 86400e3) d.setFullYear(d.getFullYear() - 1);
     const item = { name: m[5], hours: parseFloat(m[6]), takenAt: d.getTime() };
+    const dm = line.match(/—\s*(\d+(?:\.\d+)?)\s*mg\b/i);
+    if (dm) item.dose = parseFloat(dm[1]);
     const pm = line.match(/Pain (\d+)\/10/i);
     if (pm) item.pain = +pm[1];
     out.push(item);
@@ -400,6 +427,7 @@ function mergeImported(items) {
     if (!dup) {
       const entry = { id: it.takenAt + '-' + Math.random().toString(36).slice(2, 7),
                       medId: med.id, name: med.name, hours: it.hours, takenAt: it.takenAt };
+      if (it.dose != null) entry.dose = it.dose;
       if (it.pain != null) entry.pain = it.pain;
       doses.push(entry);
     }
@@ -411,6 +439,7 @@ function exportLog() {
   if (!doses.length) { toast('No doses logged yet'); return; }
   const text = doses.map(d =>
     `${fmt(d.takenAt)} — ${d.name} (every ${d.hours}h) — Next dose: ${fmt(d.takenAt + d.hours*3600e3)}` +
+    (d.dose != null ? ` — ${d.dose}mg` : '') +
     (d.pain != null ? ` — Pain ${d.pain}/10` : '')
   ).join('\n');
   if (navigator.share) {
@@ -430,20 +459,21 @@ function render() {
       sub = `Tap Take when you take it`;
     } else {
       const nextAt = last.takenAt + m.hours * 3600e3;
+      const doseSub = last.dose != null ? ` · ${last.dose}mg` : '';
       const painSub = last.pain != null ? ` · pain ${last.pain}/10` : '';
       if (now >= nextAt) {
         cd = `<div class="countdown cd-ok">✅ OK to take now</div>`;
-        sub = `Was due ${fmt(nextAt)} · last taken ${fmt(last.takenAt)}${painSub}`;
+        sub = `Was due ${fmt(nextAt)} · last taken ${fmt(last.takenAt)}${doseSub}${painSub}`;
       } else {
         cd = `<div class="countdown cd-wait" data-next="${nextAt}">${remainStr(nextAt - now)}</div>`;
-        sub = `Next dose ${fmt(nextAt)} · last taken ${fmt(last.takenAt)}${painSub}`;
+        sub = `Next dose ${fmt(nextAt)} · last taken ${fmt(last.takenAt)}${doseSub}${painSub}`;
       }
     }
     const calBtn = last && now < last.takenAt + m.hours*3600e3
       ? `<button class="cal-btn" onclick="calAlert('${m.id}')">📅 Alert</button>` : '';
     return `<div class="card">
       <div class="med-top">
-        <div class="med-name">${esc(m.name)} <span class="badge">every ${m.hours}h</span></div>
+        <div class="med-name">${esc(m.name)} <span class="badge">${m.dose != null ? esc(m.dose) + 'mg · ' : ''}every ${m.hours}h</span></div>
         <button class="edit-btn" onclick="editMed('${m.id}')">✎</button>
       </div>
       ${cd}<div class="sub">${sub}</div>
@@ -455,8 +485,9 @@ function render() {
   }).join('') || `<div class="empty">No medications — tap ＋ Add</div>`;
 
   $('log').innerHTML = doses.slice(0, 200).map(d => {
+    const doseStr = d.dose != null ? ` · ${d.dose}mg` : '';
     const painStr = d.pain != null ? ` · <b style="color:${painColor(d.pain)}">pain ${d.pain}/10</b>` : '';
-    return `<div class="log-entry"><div><b>${esc(d.name)}</b> <span class="when">· ${fmt(d.takenAt)} · every ${d.hours}h${painStr}</span><br>
+    return `<div class="log-entry"><div><b>${esc(d.name)}</b> <span class="when">· ${fmt(d.takenAt)} · every ${d.hours}h${doseStr}${painStr}</span><br>
      Next dose: ${fmt(d.takenAt + d.hours*3600e3)}</div>
      <button class="del" onclick="delDose('${d.id}')">✕</button></div>`;
   }).join('') || `<div class="empty">Doses you log will appear here</div>`;
