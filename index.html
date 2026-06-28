@@ -66,6 +66,17 @@
   .empty { color: var(--dim); font-size: 15px; text-align: center; padding: 20px 0; }
   .footer-btn { display: block; width: 100%; background: none; border: none; color: var(--dim);
                 font-size: 14px; font-weight: 600; padding: 18px 0 4px; }
+  .groups { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+  .group-chip { display: flex; align-items: center; background: var(--card); border-radius: 14px; }
+  .group-chip .glog { background: none; border: none; color: var(--text); font-size: 15px; font-weight: 700; padding: 13px 4px 13px 15px; text-align: left; }
+  .group-chip .glog small { color: var(--dim); font-weight: 600; margin-left: 6px; }
+  .group-chip .gedit { background: none; border: none; color: var(--dim); font-size: 15px; padding: 13px 13px; }
+  .group-add { background: none; border: 1px dashed #333c4d; color: var(--blue); border-radius: 14px; padding: 13px 16px; font-size: 15px; font-weight: 600; }
+  .check-list { max-height: 46vh; overflow-y: auto; margin: 6px 0 12px; }
+  .check-row { display: flex; align-items: center; gap: 12px; padding: 11px 4px; border-bottom: 1px solid #232a37; font-size: 16px; }
+  .check-row input { width: 22px; height: 22px; accent-color: var(--blue); flex-shrink: 0; }
+  .dlg-in { color-scheme: dark; }
+  .log-entry { cursor: pointer; }
   .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 30px);
            background: var(--card2); color: var(--text); padding: 12px 20px; border-radius: 14px;
            font-size: 15px; font-weight: 600; opacity: 0; transition: opacity .25s; pointer-events: none;
@@ -101,6 +112,7 @@
   <button class="add-btn" id="syncBtn" onclick="openSync()">☁️ Sync</button>
   <button class="add-btn" onclick="addMed()">＋ Add</button>
 </span></h1>
+<div id="groups" class="groups"></div>
 <div id="meds"></div>
 <button class="footer-btn" onclick="starterPrompt(true)">↺ Load standard medication list</button>
 <h2>History <span class="actions">
@@ -108,6 +120,7 @@
   <button onclick="restoreData()">Restore</button>
   <button onclick="exportLog()">Share / Copy</button>
 </span></h2>
+<button class="footer-btn" style="text-align:left;padding:0 0 10px" onclick="addPastDose()">＋ Add a dose you forgot</button>
 <div id="log"></div>
 <div class="toast" id="toast"></div>
 
@@ -380,6 +393,222 @@ async function delDose(doseId) {
   if (sure === true) { doses = doses.filter(x => x.id !== doseId); saveDoses(); render(); }
 }
 
+// ---- date/time helpers for the native picker ----
+function tsToInput(ts) { const d = new Date(ts), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
+function inputToTs(v) { const t = new Date(v).getTime(); return isNaN(t) ? 0 : t; }
+
+// the default amount a med is taken at (used by groups + forgotten-dose prefill)
+function defaultAmount(m) {
+  if (m.strength != null) { const t = m.tablets ?? 1; return { tablets: t, dose: t * m.strength }; }
+  if (m.dose != null) return { dose: m.dose };
+  return {};
+}
+function defaultDoseLabel(m) { const a = defaultAmount(m); return doseLabel(a) || '—'; }
+
+// pain chip grid + handlers shared by the custom sheets below
+function painChipsHTML(sel) {
+  return Array.from({ length: 11 }, (_, n) =>
+    `<button class="pain-chip" style="background:${painColor(n)};${sel === n ? 'outline:3px solid #fff;outline-offset:-3px' : ''}" data-pain="${n}">${n}</button>`).join('');
+}
+
+// ---- edit an existing dose (time / amount / pain / delete) ----
+function editDose(doseId) {
+  const d = doses.find(x => x.id === doseId);
+  if (!d) return;
+  const m = meds.find(x => x.id === d.medId);
+  const tabletMode = m && m.strength != null;
+  const amtVal = d.tablets != null ? d.tablets : (d.dose != null ? d.dose : '');
+  let pain = d.pain;
+  const ov = document.createElement('div'); ov.className = 'overlay';
+  ov.innerHTML = `<div class="sheet">
+    <div class="dlg-title">Edit ${esc(d.name)}</div>
+    <div class="dlg-label">Time taken</div>
+    <input class="dlg-in" type="datetime-local" id="ed-time" value="${tsToInput(d.takenAt)}">
+    <div class="dlg-label">${tabletMode ? 'Number of tablets' : 'Dosage (mg)'}</div>
+    <input class="dlg-in" id="ed-amt" inputmode="decimal" value="${esc(amtVal)}">
+    <div class="dlg-label">Pain level (tap to change)</div>
+    <div class="pain-grid">${painChipsHTML(pain)}</div>
+    <div class="dlg-row">
+      <button class="dlg-btn dlg-cancel">Cancel</button>
+      <button class="dlg-btn dlg-ok">Save</button>
+    </div>
+    <button class="dlg-extra">Delete this entry</button>
+  </div>`;
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+  ov.querySelectorAll('.pain-chip').forEach(b => b.addEventListener('click', () => {
+    pain = +b.dataset.pain;
+    ov.querySelectorAll('.pain-chip').forEach(x => x.style.outline = '');
+    b.style.outline = '3px solid #fff'; b.style.outlineOffset = '-3px';
+  }));
+  ov.querySelector('.dlg-extra').addEventListener('click', async () => {
+    const sure = await dialog({ title: 'Delete this entry?', message: `${d.name} · ${fmt(d.takenAt)}`, okText: 'Delete', danger: true });
+    if (sure === true) { doses = doses.filter(x => x.id !== doseId); saveDoses(); render(); close(); }
+  });
+  ov.querySelector('.dlg-cancel').addEventListener('click', close);
+  ov.querySelector('.dlg-ok').addEventListener('click', () => {
+    const t = inputToTs(ov.querySelector('#ed-time').value);
+    if (!t) { toast('Enter a valid time'); return; }
+    d.takenAt = t;
+    const v = parseFloat(ov.querySelector('#ed-amt').value);
+    if (isFinite(v) && v >= 0) {
+      if (tabletMode) { d.tablets = v; d.dose = v * m.strength; }
+      else { d.dose = v; delete d.tablets; }
+    }
+    if (pain != null) d.pain = pain;
+    doses.sort((a, b) => b.takenAt - a.takenAt);
+    saveDoses(); render(); close();
+    toast('Entry updated');
+  });
+}
+
+// ---- add a dose you forgot to log (pick med, set a past time) ----
+async function addPastDose() {
+  if (!meds.length) { toast('Add a medication first'); return; }
+  const r = await dialog({ title: 'Add a dose you forgot',
+    inputs: [{ label: 'Which medication?', type: 'select', value: meds[0].id, options: meds.map(m => ({ value: m.id, label: m.name })) }],
+    okText: 'Next' });
+  if (!r) return;
+  const m = meds.find(x => x.id === r[0]);
+  if (!m) return;
+  const tabletMode = m.strength != null;
+  const a = defaultAmount(m);
+  const ov = document.createElement('div'); ov.className = 'overlay';
+  ov.innerHTML = `<div class="sheet">
+    <div class="dlg-title">Add ${esc(m.name)}</div>
+    <div class="dlg-label">When did you take it?</div>
+    <input class="dlg-in" type="datetime-local" id="pd-time" value="${tsToInput(Date.now())}">
+    <div class="dlg-label">${tabletMode ? 'Number of tablets' : 'Dosage (mg)'}</div>
+    <input class="dlg-in" id="pd-amt" inputmode="decimal" value="${esc(tabletMode ? (a.tablets ?? 1) : (a.dose ?? ''))}">
+    <div class="dlg-label">Pain level (optional — tap to log)</div>
+    <div class="pain-grid">${painChipsHTML()}</div>
+    <div class="dlg-row">
+      <button class="dlg-btn dlg-cancel">Cancel</button>
+      <button class="dlg-btn dlg-skip">Log, no pain</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+  const commit = pain => {
+    const t = inputToTs(ov.querySelector('#pd-time').value);
+    if (!t) { toast('Enter a valid time'); return; }
+    const v = parseFloat(ov.querySelector('#pd-amt').value);
+    const entry = { id: t + '-' + Math.random().toString(36).slice(2, 7), medId: m.id, name: m.name, hours: m.hours, takenAt: t };
+    if (isFinite(v) && v >= 0) { if (tabletMode) { entry.tablets = v; entry.dose = v * m.strength; } else entry.dose = v; }
+    if (pain != null) entry.pain = pain;
+    doses.push(entry); doses.sort((a, b) => b.takenAt - a.takenAt);
+    saveDoses(); render(); close();
+    toast(`${m.name} added`);
+  };
+  ov.querySelectorAll('.pain-chip').forEach(b => b.addEventListener('click', () => commit(+b.dataset.pain)));
+  ov.querySelector('.dlg-cancel').addEventListener('click', close);
+  ov.querySelector('.dlg-skip').addEventListener('click', () => commit(undefined));
+}
+
+// ---- groups (e.g. Morning / Night routines that log several meds at once) ----
+let groups = JSON.parse(localStorage.getItem('mt.groups') || '[]');
+function saveGroups() { localStorage.setItem('mt.groups', JSON.stringify(groups)); scheduleSync(); }
+
+function renderGroups() {
+  const el = document.getElementById('groups');
+  if (!el) return;
+  const chips = groups.map(g => {
+    const n = g.medIds.filter(id => meds.some(m => m.id === id)).length;
+    return `<div class="group-chip">
+      <button class="glog" onclick="groupLog('${g.id}')">${esc(g.emoji || '💊')} ${esc(g.name)} <small>${n} med${n === 1 ? '' : 's'}</small></button>
+      <button class="gedit" onclick="editGroup('${g.id}')">✎</button>
+    </div>`;
+  }).join('');
+  el.innerHTML = chips + `<button class="group-add" onclick="newGroup()">＋ Group</button>`;
+}
+
+function groupLog(gid) {
+  const g = groups.find(x => x.id === gid);
+  if (!g) return;
+  const gm = g.medIds.map(id => meds.find(m => m.id === id)).filter(Boolean);
+  if (!gm.length) { toast('No medications in this group — tap ✎ to add some'); return; }
+  const ov = document.createElement('div'); ov.className = 'overlay';
+  const list = gm.map(m => `• ${esc(m.name)} — ${esc(defaultDoseLabel(m))}`).join('<br>');
+  ov.innerHTML = `<div class="sheet">
+    <div class="dlg-title">${esc(g.emoji || '💊')} Log ${esc(g.name)}</div>
+    <div class="dlg-msg">Logs all of these at the time below:<br>${list}</div>
+    <div class="dlg-label">Time taken</div>
+    <input class="dlg-in" type="datetime-local" id="gl-time" value="${tsToInput(Date.now())}">
+    <div class="dlg-label">Pain level for all (optional — tap to log)</div>
+    <div class="pain-grid">${painChipsHTML()}</div>
+    <div class="dlg-row">
+      <button class="dlg-btn dlg-cancel">Cancel</button>
+      <button class="dlg-btn dlg-skip">Log all, no pain</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+  const commit = pain => {
+    const t = inputToTs(ov.querySelector('#gl-time').value) || Date.now();
+    gm.forEach((m, i) => {
+      const a = defaultAmount(m);
+      const entry = { id: (t + i) + '-' + Math.random().toString(36).slice(2, 7), medId: m.id, name: m.name, hours: m.hours, takenAt: t + i };
+      if (a.tablets != null) entry.tablets = a.tablets;
+      if (a.dose != null) entry.dose = a.dose;
+      if (pain != null) entry.pain = pain;
+      doses.push(entry);
+    });
+    doses.sort((a, b) => b.takenAt - a.takenAt);
+    saveDoses(); render(); close();
+    toast(`Logged ${gm.length} med${gm.length === 1 ? '' : 's'} — ${g.name}`);
+  };
+  ov.querySelectorAll('.pain-chip').forEach(b => b.addEventListener('click', () => commit(+b.dataset.pain)));
+  ov.querySelector('.dlg-cancel').addEventListener('click', close);
+  ov.querySelector('.dlg-skip').addEventListener('click', () => commit(undefined));
+}
+
+function groupEditor(g) {
+  const ov = document.createElement('div'); ov.className = 'overlay';
+  const checks = meds.map(m => `<label class="check-row">
+    <input type="checkbox" value="${m.id}" ${g && g.medIds.includes(m.id) ? 'checked' : ''}>
+    <span>${esc(m.name)} <span style="color:var(--dim)">· ${esc(medDoseLabel(m) || ('every ' + m.hours + 'h'))}</span></span>
+  </label>`).join('');
+  ov.innerHTML = `<div class="sheet">
+    <div class="dlg-title">${g ? 'Edit group' : 'New group'}</div>
+    <div class="dlg-label">Name</div>
+    <input class="dlg-in" id="g-name" placeholder="e.g. Morning" value="${g ? esc(g.name) : ''}">
+    <div class="dlg-label">Emoji (optional)</div>
+    <input class="dlg-in" id="g-emoji" placeholder="☀️" value="${g ? esc(g.emoji || '') : ''}">
+    <div class="dlg-label">Medications in this group</div>
+    <div class="check-list">${checks}</div>
+    <div class="dlg-row">
+      <button class="dlg-btn dlg-cancel">Cancel</button>
+      <button class="dlg-btn dlg-ok">Save</button>
+    </div>
+    ${g ? `<button class="dlg-extra">Delete group</button>` : ''}
+  </div>`;
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+  ov.querySelector('.dlg-cancel').addEventListener('click', close);
+  if (g) ov.querySelector('.dlg-extra').addEventListener('click', async () => {
+    const sure = await dialog({ title: `Delete ${g.name}?`, message: 'Your medications and history are kept.', okText: 'Delete', danger: true });
+    if (sure === true) { groups = groups.filter(x => x.id !== g.id); saveGroups(); renderGroups(); close(); }
+  });
+  ov.querySelector('.dlg-ok').addEventListener('click', () => {
+    const name = ov.querySelector('#g-name').value.trim();
+    if (!name) { toast('Name is required'); return; }
+    const emoji = ov.querySelector('#g-emoji').value.trim();
+    const medIds = [...ov.querySelectorAll('.check-list input:checked')].map(c => c.value);
+    if (!medIds.length) { toast('Pick at least one medication'); return; }
+    if (g) { g.name = name; g.emoji = emoji; g.medIds = medIds; }
+    else groups.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name, emoji, medIds });
+    saveGroups(); renderGroups(); close();
+    toast(g ? 'Group updated' : 'Group created');
+  });
+}
+function newGroup() { groupEditor(null); }
+function editGroup(id) { const g = groups.find(x => x.id === id); if (g) groupEditor(g); }
+
 function calAlert(medId) {
   const m = meds.find(x => x.id === medId);
   const last = lastDose(medId);
@@ -567,6 +796,7 @@ function medCard(m) {
 }
 
 function render() {
+  renderGroups();
   const sched = meds.filter(m => m.category !== 'prn');
   const prn = meds.filter(m => m.category === 'prn');
   let html = '';
@@ -577,9 +807,9 @@ function render() {
   $('log').innerHTML = doses.slice(0, 200).map(d => {
     const dl = doseLabel(d) ? ` · ${doseLabel(d)}` : '';
     const pn = d.pain != null ? ` · <b style="color:${painColor(d.pain)}">pain ${d.pain}/10</b>` : '';
-    return `<div class="log-entry"><div><b>${esc(d.name)}</b> <span class="when">· ${fmt(d.takenAt)} · every ${d.hours}h${dl}${pn}</span><br>
+    return `<div class="log-entry" onclick="editDose('${d.id}')"><div><b>${esc(d.name)}</b> <span class="when">· ${fmt(d.takenAt)} · every ${d.hours}h${dl}${pn}</span><br>
      Next dose: ${fmt(d.takenAt + d.hours*3600e3)}</div>
-     <button class="del" onclick="delDose('${d.id}')">✕</button></div>`;
+     <span class="del">✎</span></div>`;
   }).join('') || `<div class="empty">Doses you log will appear here</div>`;
 }
 
@@ -644,11 +874,11 @@ function scheduleSync() {
 }
 async function pushNow() {
   if (!syncReady || !roomRef || !cryptoKey) return;
-  const j = JSON.stringify({ meds, doses });
+  const j = JSON.stringify({ meds, doses, groups });
   if (j === lastSyncJson) return;             // nothing new since last sync
   lastSyncJson = j;
   try {
-    const enc = await encryptObj({ meds, doses });
+    const enc = await encryptObj({ meds, doses, groups });
     await roomRef.set({ ...enc, ts: Date.now(), by: deviceId });
   } catch (e) { setSyncState('error'); }
 }
@@ -667,11 +897,19 @@ function applyRemote(remote, ts) {
     mergedMeds = [...remote.meds, ...meds.filter(m => !new Set(remote.meds.map(x=>x.id)).has(m.id))];
     if (extra.length || remote.meds.length !== meds.length || JSON.stringify(mergedMeds) !== JSON.stringify(meds)) changed = true;
   }
+  // groups: adopt remote definitions + keep any local-only groups
+  let mergedGroups = groups;
+  if (Array.isArray(remote.groups)) {
+    const rids = new Set(remote.groups.map(g => g.id));
+    mergedGroups = [...remote.groups, ...groups.filter(g => !rids.has(g.id))];
+    if (JSON.stringify(mergedGroups) !== JSON.stringify(groups)) changed = true;
+  }
   if (changed || mergedDoses.length !== doses.length) {
-    meds = mergedMeds; doses = mergedDoses;
-    lastSyncJson = JSON.stringify({ meds, doses });   // prevent echo push
+    meds = mergedMeds; doses = mergedDoses; groups = mergedGroups;
+    lastSyncJson = JSON.stringify({ meds, doses, groups });   // prevent echo push
     localStorage.setItem(MEDS_KEY, JSON.stringify(meds));
     localStorage.setItem(DOSES_KEY, JSON.stringify(doses));
+    localStorage.setItem('mt.groups', JSON.stringify(groups));
     render();
   }
 }

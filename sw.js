@@ -1,4 +1,4 @@
-const CACHE = 'medtimer-v7';
+const CACHE = 'medtimer-v8';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-180.png', './icon-512.png', './firebase-config.js'];
 
 self.addEventListener('install', e => {
