@@ -1031,6 +1031,20 @@ function loadStarterMeds() {
   toast(`Standard list loaded — ${added} added, ${updated} updated. History kept.`);
 }
 
+// A brand-new install (including the Home Screen app, which iOS gives its own
+// storage separate from Safari) should offer to pull everything back rather than
+// silently looking "empty".
+async function welcomePrompt() {
+  const r = await dialog({
+    title: '👋 Welcome to Medwise',
+    message: 'Already using Medwise on another device, or in Safari?\n\n'
+      + 'Enter your share code and your medications, history and charts come straight back — nothing is lost.',
+    okText: 'Enter share code', cancelText: 'Start fresh',
+  });
+  localStorage.setItem('mt.welcomed', '1');
+  if (r === true) syncSheet();
+}
+
 async function starterPrompt(manual) {
   const ok = await dialog({
     title: manual ? 'Load standard medication list?' : 'Set up your full medication list?',
@@ -1400,8 +1414,10 @@ render();
 updateInstallBtn();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
 
+// brand-new install: offer to restore from a share code before it looks "empty"
+if (freshInstall && !syncCode && !localStorage.getItem('mt.welcomed')) welcomePrompt();
 // existing installs (had data before this version) get a one-time offer to load the full list
-if (!freshInstall && !localStorage.getItem(SEED_FLAG)) starterPrompt(false);
+else if (!freshInstall && !localStorage.getItem(SEED_FLAG)) starterPrompt(false);
 
 // reconnect sync automatically if this device already has a share code
 setSyncState(syncCode ? 'connecting' : 'off');
