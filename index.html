@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<title>Med Timer</title>
+<title>Medwise</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Med Timer">
+<meta name="apple-mobile-web-app-title" content="Medwise">
 <meta name="theme-color" content="#0e1116">
 <style>
   :root {
@@ -149,7 +149,7 @@
 </style>
 </head>
 <body>
-<h1>💊 Med Timer <span style="display:flex;gap:6px">
+<h1>💊 Medwise <span style="display:flex;gap:6px">
   <button class="add-btn" style="padding:10px 12px" onclick="openInsights()">📊</button>
   <button class="add-btn" id="syncBtn" onclick="openSync()">☁️ Sync</button>
   <button class="add-btn" onclick="addMed()">＋ Add</button>
@@ -893,16 +893,16 @@ function installSheet() {
   const steps = ios
     ? [`Tap the Share button ${share} — it's at the <b>bottom</b> of Safari (or top-right on iPad).`,
        `Scroll down the list and tap <b>“Add to Home Screen”</b>.`,
-       `Tap <b>Add</b> — Med Timer appears on your Home Screen with its own icon.`]
+       `Tap <b>Add</b> — Medwise appears on your Home Screen with its own icon.`]
     : [`Open your browser menu (⋮ or ⋯).`,
        `Choose <b>Install app</b> or <b>Add to Home Screen</b>.`,
-       `Confirm — Med Timer gets its own icon and opens fullscreen.`];
+       `Confirm — Medwise gets its own icon and opens fullscreen.`];
   const warn = ios && !iosSafari()
     ? `<div class="dlg-msg" style="color:var(--amber)">⚠️ On iPhone this only works in <b>Safari</b>. Open this page in Safari first, then try again.</div>` : '';
   const ov = document.createElement('div'); ov.className = 'overlay';
   ov.innerHTML = `<div class="sheet">
-    <div class="dlg-title">Add Med Timer to your Home Screen</div>
-    <img class="ins-icon" src="icon-180.png" alt="Med Timer icon">
+    <div class="dlg-title">Add Medwise to your Home Screen</div>
+    <img class="ins-icon" src="icon-180.png" alt="Medwise icon">
     <div class="dlg-msg">It gets its own icon, opens fullscreen like a real app, and keeps working offline.</div>
     ${warn}
     ${steps.map((s, i) => `<div class="ins-step"><div class="ins-num">${i+1}</div><div>${s}</div></div>`).join('')}
@@ -1005,7 +1005,7 @@ function exportLog() {
 function backupData() {
   const payload = JSON.stringify({ app: 'medtimer', v: 1, meds, doses });
   const finish = () => toast('Backup copied — paste into Restore on the other device');
-  if (navigator.share) navigator.share({ title: 'Med Timer backup', text: payload }).catch(() => navigator.clipboard.writeText(payload).then(finish));
+  if (navigator.share) navigator.share({ title: 'Medwise backup', text: payload }).catch(() => navigator.clipboard.writeText(payload).then(finish));
   else navigator.clipboard.writeText(payload).then(finish);
 }
 

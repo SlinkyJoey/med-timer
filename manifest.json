@@ -1,7 +1,7 @@
 {
-  "name": "Med Timer",
-  "short_name": "Med Timer",
-  "description": "Medication dose timer, pain log and insights",
+  "name": "Medwise",
+  "short_name": "Medwise",
+  "description": "Medication doses, pain log and insights",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
