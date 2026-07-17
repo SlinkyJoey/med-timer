@@ -25,10 +25,11 @@
     padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 24px);
     max-width: 520px; margin: 0 auto;
   }
-  h1 { font-size: 26px; padding: 8px 2px 14px; display: flex; align-items: center; justify-content: space-between; }
+  h1 { font-size: 21px; padding: 8px 2px 14px; display: flex; align-items: center;
+       justify-content: space-between; gap: 8px; white-space: nowrap; }
   h1 .add-btn {
-    font-size: 17px; font-weight: 600; color: var(--blue); background: var(--card);
-    border: none; border-radius: 12px; padding: 10px 16px;
+    font-size: 14px; font-weight: 600; color: var(--blue); background: var(--card);
+    border: none; border-radius: 11px; padding: 9px 11px; white-space: nowrap;
   }
   .section { font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
              color: var(--dim); padding: 8px 2px 8px; }
@@ -77,6 +78,31 @@
   .check-row input { width: 22px; height: 22px; accent-color: var(--blue); flex-shrink: 0; }
   .dlg-in { color-scheme: dark; }
   .log-entry { cursor: pointer; }
+
+  /* ---- Insights / charts ---- */
+  .viz-sheet { background: var(--bg); border-radius: 20px; width: 100%; max-width: 460px;
+               max-height: 92vh; overflow-y: auto; padding: 18px 16px calc(env(safe-area-inset-bottom) + 18px); }
+  .viz-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .viz-head .dlg-title { margin: 0; }
+  .viz-close { background: var(--card2); border: none; color: var(--text); border-radius: 12px; padding: 9px 14px; font-size: 15px; font-weight: 600; }
+  .seg { display: flex; background: var(--card); border-radius: 12px; padding: 3px; margin-bottom: 14px; }
+  .seg button { flex: 1; background: none; border: none; color: var(--dim); font-size: 14px; font-weight: 600; padding: 9px 0; border-radius: 9px; }
+  .seg button.on { background: var(--card2); color: var(--text); }
+  .viz-card { background: var(--card); border-radius: 16px; padding: 14px; margin-bottom: 12px; }
+  .viz-title { font-size: 15px; font-weight: 700; }
+  .viz-sub { font-size: 12px; color: var(--dim); margin: 2px 0 10px; }
+  .viz-svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .viz-empty { color: var(--dim); font-size: 13px; text-align: center; padding: 18px 0; }
+  .viz-stat { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .hm-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .hm-cell { aspect-ratio: 1; border-radius: 4px; background: #232a37; }
+  .hm-dow { font-size: 10px; color: var(--dim); text-align: center; font-weight: 600; }
+  .hm-legend { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--dim); margin-top: 9px; justify-content: flex-end; }
+  .hm-legend i { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
+  .viz-tip { position: fixed; background: var(--card2); color: var(--text); font-size: 12px; font-weight: 600;
+             padding: 7px 10px; border-radius: 9px; pointer-events: none; opacity: 0; transition: opacity .12s;
+             box-shadow: 0 4px 16px rgba(0,0,0,.5); z-index: 120; white-space: nowrap; }
+  .viz-tip.on { opacity: 1; }
   .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 30px);
            background: var(--card2); color: var(--text); padding: 12px 20px; border-radius: 14px;
            font-size: 15px; font-weight: 600; opacity: 0; transition: opacity .25s; pointer-events: none;
@@ -108,7 +134,8 @@
 </style>
 </head>
 <body>
-<h1>💊 Med Timer <span style="display:flex;gap:8px">
+<h1>💊 Med Timer <span style="display:flex;gap:6px">
+  <button class="add-btn" style="padding:10px 12px" onclick="openInsights()">📊</button>
   <button class="add-btn" id="syncBtn" onclick="openSync()">☁️ Sync</button>
   <button class="add-btn" onclick="addMed()">＋ Add</button>
 </span></h1>
@@ -608,6 +635,238 @@ function groupEditor(g) {
 }
 function newGroup() { groupEditor(null); }
 function editGroup(id) { const g = groups.find(x => x.id === id); if (g) groupEditor(g); }
+
+/* =================== Insights (charts) ===================
+   Every chart here is single-series, so each uses one hue and no legend — the
+   title says what is plotted. Pain is always orange, counts always blue, and
+   the over-limit status red is reserved for exactly that. */
+const VIZ = { pain:'#d95926', count:'#3987e5', critical:'#d03b3b',
+              grid:'#2c313d', muted:'#8b94a3', surface:'#1a1f29' };
+// Sequential ramp for the pain heatmap: ONE hue (orange), monotone lightness,
+// anchored dark near the surface and brightening with pain — never a rainbow.
+const PAIN_RAMP = ['#241a16', '#6b3018', '#a8441f', '#d95926', '#ff8a4d'];
+function painRamp(v) {                       // v: 0..10 on an absolute scale
+  const x = Math.max(0, Math.min(10, v)) / 10 * (PAIN_RAMP.length - 1);
+  const i = Math.min(Math.floor(x), PAIN_RAMP.length - 2), f = x - i;
+  const hx = h => [1,3,5].map(k => parseInt(h.slice(k, k+2), 16));
+  const a = hx(PAIN_RAMP[i]), b = hx(PAIN_RAMP[i+1]);
+  return '#' + a.map((c, k) => Math.round(c + (b[k]-c)*f).toString(16).padStart(2,'0')).join('');
+}
+let vizPeriod = 30;   // 7 | 30 | 0 (all)
+
+const dayStart = ts => { const d = new Date(ts); d.setHours(0,0,0,0); return d.getTime(); };
+const dKey = ts => { const d = new Date(ts); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
+const round1 = n => Math.round(n * 10) / 10;
+
+function periodStart() {
+  if (vizPeriod === 0) return doses.length ? dayStart(Math.min(...doses.map(d => d.takenAt))) : dayStart(Date.now());
+  const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - (vizPeriod - 1));
+  return d.getTime();
+}
+function periodDays() {   // array of day-start timestamps, DST-safe
+  const out = [], end = dayStart(Date.now());
+  for (const d = new Date(periodStart()); d.getTime() <= end; d.setDate(d.getDate() + 1)) out.push(dayStart(d.getTime()));
+  return out;
+}
+const inPeriod = () => { const s = periodStart(); return doses.filter(d => d.takenAt >= s); };
+const isPrn = medId => { const m = meds.find(x => x.id === medId); return m && m.category === 'prn'; };
+const shortDay = ts => { const d = new Date(ts); return `${d.getDate()}/${d.getMonth()+1}`; };
+
+// thin labels so they never collide: first, last, and a few evenly spaced
+function labelEvery(n) { return n <= 7 ? 1 : Math.ceil(n / 6); }
+
+// ---- generic bar chart (single series) ----
+function svgBars(bars, opts = {}) {
+  const W = 320, H = opts.h || 132, padL = 26, padR = 10, padT = 12, padB = 20;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const maxV = Math.max(opts.yMax || 0, ...bars.map(b => b.v), opts.limit || 0, 1);
+  const n = bars.length || 1, band = iw / n, bw = Math.max(2, Math.min(24, band - 2)); // 2px surface gap
+  const y = v => padT + ih - (v / maxV) * ih;
+  const ticks = [0, maxV / 2, maxV];
+  const grid = ticks.map(t => `<line x1="${padL}" y1="${y(t)}" x2="${W-padR}" y2="${y(t)}" stroke="${VIZ.grid}" stroke-width="1"/>` +
+    `<text x="${padL-5}" y="${y(t)+3}" text-anchor="end" font-size="9" fill="${VIZ.muted}">${round1(t)}</text>`).join('');
+  const limit = opts.limit ? `<line x1="${padL}" y1="${y(opts.limit)}" x2="${W-padR}" y2="${y(opts.limit)}" stroke="${VIZ.critical}" stroke-width="1"/>` +
+    `<text x="${W-padR}" y="${y(opts.limit)-4}" text-anchor="end" font-size="9" fill="${VIZ.critical}">${esc(opts.limitLabel || ('limit ' + opts.limit))}</text>` : '';
+  const rects = bars.map((b, i) => {
+    if (!(b.v > 0)) return '';
+    const h = (b.v / maxV) * ih, x = padL + i * band + (band - bw) / 2, yy = padT + ih - h;
+    const r = Math.min(4, bw / 2, h);   // 4px rounded data-end, square at baseline
+    const col = b.over ? VIZ.critical : (opts.color || VIZ.count);
+    return `<path d="M${x},${padT+ih} L${x},${yy+r} Q${x},${yy} ${x+r},${yy} L${x+bw-r},${yy} Q${x+bw},${yy} ${x+bw},${yy+r} L${x+bw},${padT+ih} Z" fill="${col}" data-tip="${esc(b.tip||'')}"/>`;
+  }).join('');
+  const step = opts.labelEvery || 1;
+  const labels = bars.map((b, i) => (b.label && (i % step === 0 || i === bars.length - 1))
+    ? `<text x="${padL + i*band + band/2}" y="${H-5}" text-anchor="middle" font-size="9" fill="${VIZ.muted}">${esc(b.label)}</text>` : '').join('');
+  return `<svg viewBox="0 0 ${W} ${H}" class="viz-svg">${grid}${limit}${rects}${labels}</svg>`;
+}
+
+// ---- pain line chart ----
+function svgPainLine(pts) {
+  const W = 320, H = 140, padL = 22, padR = 12, padT = 12, padB = 20;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const t0 = pts[0].t, t1 = pts[pts.length-1].t;
+  const x = t => padL + (t1 === t0 ? iw/2 : ((t - t0) / (t1 - t0)) * iw);
+  const y = v => padT + ih - (v / 10) * ih;
+  const grid = [0,5,10].map(v => `<line x1="${padL}" y1="${y(v)}" x2="${W-padR}" y2="${y(v)}" stroke="${VIZ.grid}" stroke-width="1"/>` +
+    `<text x="${padL-5}" y="${y(v)+3}" text-anchor="end" font-size="9" fill="${VIZ.muted}">${v}</text>`).join('');
+  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${round1(x(p.t))},${round1(y(p.v))}`).join(' ');
+  const line = `<path d="${d}" fill="none" stroke="${VIZ.pain}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  // markers only when sparse enough to stay readable; 2px surface ring
+  const dots = pts.length <= 14 ? pts.map(p =>
+    `<circle cx="${round1(x(p.t))}" cy="${round1(y(p.v))}" r="4" fill="${VIZ.pain}" stroke="${VIZ.surface}" stroke-width="2" data-tip="${esc(p.tip)}"/>`).join('') : '';
+  const last = pts[pts.length-1];
+  const endLbl = `<circle cx="${round1(x(last.t))}" cy="${round1(y(last.v))}" r="4" fill="${VIZ.pain}" stroke="${VIZ.surface}" stroke-width="2" data-tip="${esc(last.tip)}"/>` +
+    `<text x="${round1(x(last.t))-6}" y="${round1(y(last.v))-8}" text-anchor="end" font-size="11" font-weight="700" fill="${VIZ.pain}">${round1(last.v)}</text>`;
+  const xl = `<text x="${padL}" y="${H-5}" font-size="9" fill="${VIZ.muted}">${esc(shortDay(t0))}</text>` +
+             `<text x="${W-padR}" y="${H-5}" text-anchor="end" font-size="9" fill="${VIZ.muted}">${esc(shortDay(t1))}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" class="viz-svg">${grid}${line}${dots}${endLbl}${xl}</svg>`;
+}
+
+// ---- the six charts ----
+function chartPainTrend() {
+  const rated = inPeriod().filter(d => d.pain != null);
+  if (rated.length < 2) return vizCard('Pain trend', 'Average pain per day', vizEmpty('Log a couple more pain ratings and this fills in.'));
+  const byDay = new Map();
+  rated.forEach(d => { const k = dayStart(d.takenAt); if (!byDay.has(k)) byDay.set(k, []); byDay.get(k).push(d.pain); });
+  let pts = [...byDay.entries()].sort((a,b) => a[0]-b[0])
+    .map(([t, arr]) => ({ t, v: arr.reduce((s,x)=>s+x,0)/arr.length, n: arr.length }));
+  let sub = 'Average pain per day';
+  if (vizPeriod === 0 && pts.length > 21) {   // zoom out to weekly averages
+    const byWeek = new Map();
+    pts.forEach(p => { const d = new Date(p.t); d.setDate(d.getDate() - ((d.getDay()+6)%7)); d.setHours(0,0,0,0);
+      const k = d.getTime(); if (!byWeek.has(k)) byWeek.set(k, []); byWeek.get(k).push(p.v); });
+    pts = [...byWeek.entries()].sort((a,b)=>a[0]-b[0]).map(([t,a]) => ({ t, v: a.reduce((s,x)=>s+x,0)/a.length, n: a.length }));
+    sub = 'Average pain per week';
+  }
+  pts.forEach(p => p.tip = `${shortDay(p.t)} · pain ${round1(p.v)}/10`);
+  const avg = round1(rated.reduce((s,d)=>s+d.pain,0) / rated.length);
+  return vizCard('Pain trend', `${sub} · ${rated.length} rating${rated.length===1?'':'s'}, average ${avg}/10`, svgPainLine(pts));
+}
+
+function chartPainByTime() {
+  const buckets = [ {label:'Night', h:[0,5]}, {label:'Morning', h:[6,11]}, {label:'Afternoon', h:[12,17]}, {label:'Evening', h:[18,23]} ];
+  const rated = inPeriod().filter(d => d.pain != null);
+  if (!rated.length) return vizCard('Pain by time of day', 'When your pain runs highest', vizEmpty('No pain ratings in this period yet.'));
+  const bars = buckets.map(b => {
+    const hits = rated.filter(d => { const h = new Date(d.takenAt).getHours(); return h >= b.h[0] && h <= b.h[1]; });
+    const v = hits.length ? hits.reduce((s,d)=>s+d.pain,0)/hits.length : 0;
+    return { label: b.label, v, tip: hits.length ? `${b.label} · avg ${round1(v)}/10 (${hits.length})` : `${b.label} · no data` };
+  });
+  const best = bars.filter(b=>b.v>0).sort((a,b)=>b.v-a.v)[0];
+  return vizCard('Pain by time of day', best ? `Worst around ${best.label.toLowerCase()} — average ${round1(best.v)}/10` : 'When your pain runs highest',
+    svgBars(bars, { yMax: 10, color: VIZ.pain }));
+}
+
+function chartHeatmap() {
+  const weeks = 6, cells = [];
+  const end = new Date(); end.setHours(0,0,0,0);
+  const start = new Date(end); start.setDate(start.getDate() - (weeks*7 - 1));
+  start.setDate(start.getDate() - ((start.getDay()+6)%7));   // back to Monday
+  const byDay = new Map();
+  doses.filter(d => d.pain != null).forEach(d => { const k = dKey(d.takenAt); if (!byDay.has(k)) byDay.set(k, []); byDay.get(k).push(d.pain); });
+  if (!byDay.size) return vizCard('Pain calendar', 'Each day shaded by average pain', vizEmpty('No pain ratings logged yet.'));
+  for (const d = new Date(start); d <= end; d.setDate(d.getDate()+1)) {
+    const arr = byDay.get(dKey(d.getTime()));
+    const v = arr ? arr.reduce((s,x)=>s+x,0)/arr.length : null;
+    const bg = v == null ? '#232a37' : painRamp(v);
+    cells.push(`<div class="hm-cell" style="background:${bg}" data-tip="${esc(v==null ? `${shortDay(d.getTime())} · no rating` : `${shortDay(d.getTime())} · pain ${round1(v)}/10`)}"></div>`);
+  }
+  const dow = ['M','T','W','T','F','S','S'].map(x => `<div class="hm-dow">${x}</div>`).join('');
+  const legend = `<div class="hm-legend">0
+    ${[0,2.5,5,7.5,10].map(v=>`<i style="background:${painRamp(v)}"></i>`).join('')} 10 pain</div>`;
+  return vizCard('Pain calendar', 'Each day shaded by average pain — last 6 weeks',
+    `<div class="hm-grid">${dow}${cells.join('')}</div>${legend}`);
+}
+
+function chartBreakthrough() {
+  const days = periodDays();
+  const prn = inPeriod().filter(d => isPrn(d.medId));
+  if (!prn.length) return vizCard('Breakthrough (PRN) doses', 'As-needed meds used per day', vizEmpty('No as-needed doses logged in this period.'));
+  const bars = days.map(t => {
+    const n = prn.filter(d => dayStart(d.takenAt) === t).length;
+    return { label: shortDay(t), v: n, tip: `${shortDay(t)} · ${n} PRN dose${n===1?'':'s'}` };
+  });
+  const total = prn.length, perDay = round1(total / days.length);
+  return vizCard('Breakthrough (PRN) doses', `As-needed meds per day · ${total} total, ${perDay}/day average`,
+    svgBars(bars, { labelEvery: labelEvery(bars.length) }));
+}
+
+function chartMgVsLimit() {
+  const capped = meds.filter(m => m.maxPerDay && m.maxPerDay.mg != null);
+  if (!capped.length) return '';
+  const days = periodDays();
+  return capped.map(m => {
+    const mine = inPeriod().filter(d => d.medId === m.id);
+    if (!mine.length) return vizCard(`${m.name} per day`, `Against your ${m.maxPerDay.mg}mg / 24h limit`, vizEmpty(`No ${m.name} logged in this period.`));
+    const bars = days.map(t => {
+      const mg = mine.filter(d => dayStart(d.takenAt) === t).reduce((s,d) => s + (d.dose||0), 0);
+      return { label: shortDay(t), v: mg, over: mg > m.maxPerDay.mg, tip: `${shortDay(t)} · ${mg}mg${mg > m.maxPerDay.mg ? ' — over limit' : ''}` };
+    });
+    const overDays = bars.filter(b => b.over).length;
+    return vizCard(`${m.name} per day`, overDays ? `⚠️ Over your ${m.maxPerDay.mg}mg limit on ${overDays} day${overDays===1?'':'s'}` : `Always within your ${m.maxPerDay.mg}mg / 24h limit`,
+      svgBars(bars, { limit: m.maxPerDay.mg, limitLabel: `${m.maxPerDay.mg}mg limit`, labelEvery: labelEvery(bars.length) }));
+  }).join('');
+}
+
+function chartAdherence() {
+  const sched = meds.filter(m => m.category !== 'prn');
+  const expected = sched.reduce((s,m) => s + ((m.maxPerDay && m.maxPerDay.doses) || Math.floor(24 / m.hours) || 1), 0);
+  if (!sched.length || !expected) return '';
+  const days = periodDays();
+  const mine = inPeriod().filter(d => !isPrn(d.medId));
+  if (!mine.length) return vizCard('Scheduled doses taken', `Out of about ${expected} a day`, vizEmpty('No scheduled doses logged in this period.'));
+  const bars = days.map(t => {
+    const n = mine.filter(d => dayStart(d.takenAt) === t).length;
+    return { label: shortDay(t), v: n, tip: `${shortDay(t)} · ${n} of ~${expected} taken` };
+  });
+  const done = bars.reduce((s,b) => s + Math.min(b.v, expected), 0);
+  const pct = Math.round((done / (expected * days.length)) * 100);
+  return vizCard('Scheduled doses taken', `About ${pct}% of your ~${expected}/day routine over this period`,
+    svgBars(bars, { limit: expected, limitLabel: `${expected}/day`, labelEvery: labelEvery(bars.length) }));
+}
+
+const vizEmpty = msg => `<div class="viz-empty">${esc(msg)}</div>`;
+const vizCard = (title, sub, body) => `<div class="viz-card"><div class="viz-title">${esc(title)}</div><div class="viz-sub">${esc(sub)}</div>${body}</div>`;
+
+function renderInsights(root) {
+  const opts = [[7,'Week'],[30,'Month'],[0,'All']];
+  root.querySelector('#viz-seg').innerHTML = opts.map(([v,l]) =>
+    `<button class="${vizPeriod===v?'on':''}" data-p="${v}">${l}</button>`).join('');
+  root.querySelectorAll('#viz-seg button').forEach(b => b.onclick = () => { vizPeriod = +b.dataset.p; renderInsights(root); });
+  const rated = doses.filter(d => d.pain != null).length;
+  root.querySelector('#viz-body').innerHTML = doses.length
+    ? chartPainTrend() + chartPainByTime() + chartHeatmap() + chartBreakthrough() + chartMgVsLimit() + chartAdherence()
+      + (rated === 0 ? `<div class="viz-empty">Tip: tap a pain number when you log a dose and the pain charts come alive.</div>` : '')
+    : `<div class="viz-empty">Log a few doses and your charts will appear here.</div>`;
+}
+
+function openInsights() {
+  const ov = document.createElement('div'); ov.className = 'overlay';
+  ov.innerHTML = `<div class="viz-sheet">
+    <div class="viz-head"><div class="dlg-title">📊 Insights</div><button class="viz-close">Done</button></div>
+    <div class="seg" id="viz-seg"></div>
+    <div id="viz-body"></div>
+  </div><div class="viz-tip" id="viz-tip"></div>`;
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.querySelector('.viz-close').onclick = close;
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+  renderInsights(ov);
+  // tap / hover tooltips on any mark carrying data-tip
+  const tip = ov.querySelector('#viz-tip');
+  const show = e => {
+    const el = e.target.closest('[data-tip]');
+    if (!el) { tip.classList.remove('on'); return; }
+    const r = el.getBoundingClientRect();
+    tip.textContent = el.dataset.tip;
+    tip.classList.add('on');
+    tip.style.left = Math.min(Math.max(8, r.left + r.width/2 - tip.offsetWidth/2), innerWidth - tip.offsetWidth - 8) + 'px';
+    tip.style.top = Math.max(8, r.top - tip.offsetHeight - 8) + 'px';
+  };
+  ov.addEventListener('pointerdown', show);
+  ov.addEventListener('pointermove', e => { if (e.pointerType === 'mouse') show(e); });
+  ov.addEventListener('pointerleave', () => tip.classList.remove('on'));
+}
 
 function calAlert(medId) {
   const m = meds.find(x => x.id === medId);
