@@ -103,6 +103,21 @@
              padding: 7px 10px; border-radius: 9px; pointer-events: none; opacity: 0; transition: opacity .12s;
              box-shadow: 0 4px 16px rgba(0,0,0,.5); z-index: 120; white-space: nowrap; }
   .viz-tip.on { opacity: 1; }
+
+  /* ---- Add to Home Screen ---- */
+  .install-btn { display: block; width: 100%; margin-top: 22px; background: var(--card);
+                 border: 1px solid #333c4d; color: var(--blue); border-radius: 14px;
+                 padding: 15px 0; font-size: 15px; font-weight: 700; }
+  .install-btn[hidden] { display: none; }
+  .ins-icon { width: 76px; height: 76px; border-radius: 17px; display: block; margin: 4px auto 14px;
+              box-shadow: 0 6px 18px rgba(0,0,0,.45); }
+  .ins-step { display: flex; gap: 11px; align-items: flex-start; font-size: 15px; line-height: 1.45;
+              padding: 9px 0; border-bottom: 1px solid #2b3241; }
+  .ins-step:last-of-type { border-bottom: none; }
+  .ins-num { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--blue);
+             color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center;
+             justify-content: center; margin-top: 1px; }
+  .ins-share { display: inline-block; vertical-align: -4px; margin: 0 1px; }
   .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 30px);
            background: var(--card2); color: var(--text); padding: 12px 20px; border-radius: 14px;
            font-size: 15px; font-weight: 600; opacity: 0; transition: opacity .25s; pointer-events: none;
@@ -149,6 +164,7 @@
 </span></h2>
 <button class="footer-btn" style="text-align:left;padding:0 0 10px" onclick="addPastDose()">＋ Add a dose you forgot</button>
 <div id="log"></div>
+<button class="install-btn" id="installBtn" onclick="addToHome()" hidden>📲 Add app to Home Screen</button>
 <div class="toast" id="toast"></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
@@ -840,6 +856,64 @@ function renderInsights(root) {
     : `<div class="viz-empty">Log a few doses and your charts will appear here.</div>`;
 }
 
+/* =================== Add to Home Screen ===================
+   iOS gives no programmatic install API (Apple blocks it), so there we show the
+   real steps. Android/desktop Chrome fire beforeinstallprompt — there it's one tap. */
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; updateInstallBtn(); });
+window.addEventListener('appinstalled', () => { deferredPrompt = null; updateInstallBtn(); toast('Installed — open it from your Home Screen'); });
+
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);   // iPadOS
+const iosSafari = () => isIOS() && !/crios|fxios|edgios/i.test(navigator.userAgent);
+
+function updateInstallBtn() {
+  const b = document.getElementById('installBtn');
+  if (b) b.hidden = isStandalone();
+}
+
+async function addToHome() {
+  if (deferredPrompt) {                       // Android / desktop: real one-tap install
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null; updateInstallBtn();
+    if (outcome !== 'accepted') toast('No problem — the button stays here');
+    return;
+  }
+  installSheet();                             // iOS (and anything else): show the steps
+}
+
+function installSheet() {
+  const share = `<svg class="ins-share" width="15" height="18" viewBox="0 0 15 18" fill="none">
+    <path d="M7.5 1v10M7.5 1 4.3 4.2M7.5 1l3.2 3.2" stroke="#5aa9ff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M3.6 7.2H2.4A1.4 1.4 0 0 0 1 8.6v7A1.4 1.4 0 0 0 2.4 17h10.2a1.4 1.4 0 0 0 1.4-1.4v-7a1.4 1.4 0 0 0-1.4-1.4h-1.2" stroke="#5aa9ff" stroke-width="1.6" stroke-linecap="round"/>
+  </svg>`;
+  const ios = isIOS();
+  const steps = ios
+    ? [`Tap the Share button ${share} — it's at the <b>bottom</b> of Safari (or top-right on iPad).`,
+       `Scroll down the list and tap <b>“Add to Home Screen”</b>.`,
+       `Tap <b>Add</b> — Med Timer appears on your Home Screen with its own icon.`]
+    : [`Open your browser menu (⋮ or ⋯).`,
+       `Choose <b>Install app</b> or <b>Add to Home Screen</b>.`,
+       `Confirm — Med Timer gets its own icon and opens fullscreen.`];
+  const warn = ios && !iosSafari()
+    ? `<div class="dlg-msg" style="color:var(--amber)">⚠️ On iPhone this only works in <b>Safari</b>. Open this page in Safari first, then try again.</div>` : '';
+  const ov = document.createElement('div'); ov.className = 'overlay';
+  ov.innerHTML = `<div class="sheet">
+    <div class="dlg-title">Add Med Timer to your Home Screen</div>
+    <img class="ins-icon" src="icon-180.png" alt="Med Timer icon">
+    <div class="dlg-msg">It gets its own icon, opens fullscreen like a real app, and keeps working offline.</div>
+    ${warn}
+    ${steps.map((s, i) => `<div class="ins-step"><div class="ins-num">${i+1}</div><div>${s}</div></div>`).join('')}
+    <div class="dlg-row"><button class="dlg-btn dlg-ok">Got it</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.querySelector('.dlg-ok').onclick = close;
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+}
+
 function openInsights() {
   const ov = document.createElement('div'); ov.className = 'overlay';
   ov.innerHTML = `<div class="viz-sheet">
@@ -1271,6 +1345,7 @@ function syncSheet() {
 function openSync() { syncSheet(); }
 
 render();
+updateInstallBtn();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
 
 // existing installs (had data before this version) get a one-time offer to load the full list

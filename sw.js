@@ -1,8 +1,15 @@
-const CACHE = 'medtimer-v9';
-const ASSETS = ['./', './index.html', './manifest.json', './icon-180.png', './icon-512.png', './firebase-config.js'];
+const CACHE = 'medtimer-v10';
+const ASSETS = ['./', './index.html', './manifest.json', './firebase-config.js',
+                './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // cache:'reload' so a new version always pulls fresh copies from the network —
+  // a plain addAll() reads the browser's HTTP cache and can re-cache stale assets
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', e => {
