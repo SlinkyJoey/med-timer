@@ -1,4 +1,4 @@
-const CACHE = 'medtimer-v11';
+const CACHE = 'medtimer-v12';
 const ASSETS = ['./', './index.html', './manifest.json', './firebase-config.js',
                 './icon-180.png', './icon-192.png', './icon-512.png'];
 

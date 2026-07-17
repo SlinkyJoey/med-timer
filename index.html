@@ -95,7 +95,9 @@
   .viz-empty { color: var(--dim); font-size: 13px; text-align: center; padding: 18px 0; }
   .viz-stat { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .hm-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-  .hm-cell { aspect-ratio: 1; border-radius: 4px; background: #232a37; }
+  .hm-cell { aspect-ratio: 1; border-radius: 4px; background: #232a37; display: flex;
+             align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
+             font-variant-numeric: tabular-nums; }
   .hm-dow { font-size: 10px; color: var(--dim); text-align: center; font-weight: 600; }
   .hm-legend { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--dim); margin-top: 9px; justify-content: flex-end; }
   .hm-legend i { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
@@ -108,7 +110,16 @@
   .install-btn { display: block; width: 100%; margin-top: 22px; background: var(--card);
                  border: 1px solid #333c4d; color: var(--blue); border-radius: 14px;
                  padding: 15px 0; font-size: 15px; font-weight: 700; }
-  .install-btn[hidden] { display: none; }
+  .install-btn[hidden], .ins-banner[hidden] { display: none; }
+  .ins-banner { display: flex; align-items: center; gap: 11px; background: var(--card);
+                border: 1px solid #333c4d; border-radius: 16px; padding: 11px 12px; margin-bottom: 14px; }
+  .ins-banner img { width: 38px; height: 38px; border-radius: 9px; flex-shrink: 0; }
+  .ins-banner .txt { flex: 1; min-width: 0; line-height: 1.3; }
+  .ins-banner .txt b { font-size: 14px; display: block; }
+  .ins-banner .txt span { font-size: 12px; color: var(--dim); }
+  .ins-banner .go { background: var(--blue); border: none; color: #fff; border-radius: 10px;
+                    padding: 9px 13px; font-size: 14px; font-weight: 700; flex-shrink: 0; }
+  .ins-banner .x { background: none; border: none; color: var(--dim); font-size: 15px; padding: 6px; flex-shrink: 0; }
   .ins-icon { width: 76px; height: 76px; border-radius: 17px; display: block; margin: 4px auto 14px;
               box-shadow: 0 6px 18px rgba(0,0,0,.45); }
   .ins-step { display: flex; gap: 11px; align-items: flex-start; font-size: 15px; line-height: 1.45;
@@ -154,6 +165,12 @@
   <button class="add-btn" id="syncBtn" onclick="openSync()">☁️ Sync</button>
   <button class="add-btn" onclick="addMed()">＋ Add</button>
 </span></h1>
+<div class="ins-banner" id="installBanner" hidden>
+  <img src="icon-180.png" alt="">
+  <div class="txt"><b>Add Medwise to your Home Screen</b><span>Opens fullscreen · works offline</span></div>
+  <button class="go" onclick="addToHome()">Add</button>
+  <button class="x" onclick="dismissInstall()" aria-label="Dismiss">✕</button>
+</div>
 <div id="groups" class="groups"></div>
 <div id="meds"></div>
 <button class="footer-btn" onclick="starterPrompt(true)">↺ Load standard medication list</button>
@@ -660,7 +677,15 @@ const VIZ = { pain:'#d95926', count:'#3987e5', critical:'#d03b3b',
               grid:'#2c313d', muted:'#8b94a3', surface:'#1a1f29' };
 // Sequential ramp for the pain heatmap: ONE hue (orange), monotone lightness,
 // anchored dark near the surface and brightening with pain — never a rainbow.
-const PAIN_RAMP = ['#241a16', '#6b3018', '#a8441f', '#d95926', '#ff8a4d'];
+// Widened lightness spread so mid-range days (where real pain data clusters)
+// actually separate; the in-cell number carries the exact value regardless.
+const PAIN_RAMP = ['#241a16', '#7d3317', '#c25320', '#f57a35', '#ffb184'];
+// pick readable ink for a given cell colour (never rely on colour alone)
+function textOn(hex) {
+  const [r, g, b] = [1,3,5].map(k => parseInt(hex.slice(k, k+2), 16) / 255)
+    .map(c => c <= 0.03928 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4));
+  return (0.2126*r + 0.7152*g + 0.0722*b) > 0.32 ? '#1a0f08' : 'rgba(255,255,255,.92)';
+}
 function painRamp(v) {                       // v: 0..10 on an absolute scale
   const x = Math.max(0, Math.min(10, v)) / 10 * (PAIN_RAMP.length - 1);
   const i = Math.min(Math.floor(x), PAIN_RAMP.length - 2), f = x - i;
@@ -785,7 +810,8 @@ function chartHeatmap() {
     const arr = byDay.get(dKey(d.getTime()));
     const v = arr ? arr.reduce((s,x)=>s+x,0)/arr.length : null;
     const bg = v == null ? '#232a37' : painRamp(v);
-    cells.push(`<div class="hm-cell" style="background:${bg}" data-tip="${esc(v==null ? `${shortDay(d.getTime())} · no rating` : `${shortDay(d.getTime())} · pain ${round1(v)}/10`)}"></div>`);
+    const num = v == null ? '' : `<span style="color:${textOn(bg)}">${Math.round(v)}</span>`;
+    cells.push(`<div class="hm-cell" style="background:${bg}" data-tip="${esc(v==null ? `${shortDay(d.getTime())} · no rating` : `${shortDay(d.getTime())} · pain ${round1(v)}/10`)}">${num}</div>`);
   }
   const dow = ['M','T','W','T','F','S','S'].map(x => `<div class="hm-dow">${x}</div>`).join('');
   const legend = `<div class="hm-legend">0
@@ -868,9 +894,18 @@ const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent)
   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);   // iPadOS
 const iosSafari = () => isIOS() && !/crios|fxios|edgios/i.test(navigator.userAgent);
 
+const INS_DISMISS = 'mt.installDismissed';
+function dismissInstall() { localStorage.setItem(INS_DISMISS, '1'); updateInstallBtn(); }
+
+// Banner sits at the top so it's never buried under the history. Dismissing it
+// drops back to the quiet button at the bottom, so there's always a way in.
 function updateInstallBtn() {
-  const b = document.getElementById('installBtn');
-  if (b) b.hidden = isStandalone();
+  const banner = document.getElementById('installBanner');
+  const btn = document.getElementById('installBtn');
+  const installed = isStandalone();
+  const dismissed = localStorage.getItem(INS_DISMISS) === '1';
+  if (banner) banner.hidden = installed || dismissed;
+  if (btn) btn.hidden = installed || !dismissed;
 }
 
 async function addToHome() {
