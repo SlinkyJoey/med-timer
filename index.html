@@ -129,6 +129,9 @@
              color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center;
              justify-content: center; margin-top: 1px; }
   .ins-share { display: inline-block; vertical-align: -4px; margin: 0 1px; }
+  .ins-tip { background: var(--bg); border-radius: 12px; padding: 11px 12px; margin-top: 12px;
+             font-size: 13px; line-height: 1.5; color: var(--dim); }
+  .ins-tip b { color: var(--text); }
   .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 30px);
            background: var(--card2); color: var(--text); padding: 12px 20px; border-radius: 14px;
            font-size: 15px; font-weight: 600; opacity: 0; transition: opacity .25s; pointer-events: none;
@@ -893,6 +896,10 @@ const isStandalone = () => window.matchMedia('(display-mode: standalone)').match
 const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent)
   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);   // iPadOS
 const iosSafari = () => isIOS() && !/crios|fxios|edgios/i.test(navigator.userAgent);
+const isIPad = () => /ipad/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+// macOS Safari has no Home Screen — it uses Share → Add to Dock instead
+const isMacSafari = () => !isIOS() && /Mac/i.test(navigator.platform)
+  && /safari/i.test(navigator.userAgent) && !/chrome|chromium|edg|firefox/i.test(navigator.userAgent);
 
 const INS_DISMISS = 'mt.installDismissed';
 function dismissInstall() { localStorage.setItem(INS_DISMISS, '1'); updateInstallBtn(); }
@@ -925,15 +932,24 @@ function installSheet() {
     <path d="M3.6 7.2H2.4A1.4 1.4 0 0 0 1 8.6v7A1.4 1.4 0 0 0 2.4 17h10.2a1.4 1.4 0 0 0 1.4-1.4v-7a1.4 1.4 0 0 0-1.4-1.4h-1.2" stroke="#5aa9ff" stroke-width="1.6" stroke-linecap="round"/>
   </svg>`;
   const ios = isIOS();
+  const where = isIPad() ? 'top-right' : 'bottom';
   const steps = ios
-    ? [`Tap the Share button ${share} — it's at the <b>bottom</b> of Safari (or top-right on iPad).`,
+    ? [`Tap the Share button ${share} — it's in the bar at the <b>${where}</b> of Safari.`,
        `Scroll down the list and tap <b>“Add to Home Screen”</b>.`,
        `Tap <b>Add</b> — Medwise appears on your Home Screen with its own icon.`]
+    : isMacSafari()
+    ? [`Click the Share button ${share} in Safari's toolbar (top-right).`,
+       `Choose <b>“Add to Dock”</b>.`,
+       `Click <b>Add</b> — Medwise gets its own icon and window.`]
     : [`Open your browser menu (⋮ or ⋯).`,
        `Choose <b>Install app</b> or <b>Add to Home Screen</b>.`,
        `Confirm — Medwise gets its own icon and opens fullscreen.`];
+  // the two things that actually trip people up
+  const tips = ios ? `<div class="ins-tip"><b>Can't see the Share button?</b><br>
+      • Safari <b>hides the bar while you scroll</b> — tap the very ${where} edge of the screen, or scroll up, and it reappears.<br>
+      • If you opened this from a message or email you're in that app's mini-browser, which can't add to the Home Screen — tap <b>⋯</b> or the compass icon and choose <b>“Open in Safari”</b> first.</div>` : '';
   const warn = ios && !iosSafari()
-    ? `<div class="dlg-msg" style="color:var(--amber)">⚠️ On iPhone this only works in <b>Safari</b>. Open this page in Safari first, then try again.</div>` : '';
+    ? `<div class="dlg-msg" style="color:var(--amber)">⚠️ On iPhone this only works in <b>Safari</b> — Chrome and Firefox can't do it. Open this page in Safari, then try again.</div>` : '';
   const ov = document.createElement('div'); ov.className = 'overlay';
   ov.innerHTML = `<div class="sheet">
     <div class="dlg-title">Add Medwise to your Home Screen</div>
@@ -941,6 +957,7 @@ function installSheet() {
     <div class="dlg-msg">It gets its own icon, opens fullscreen like a real app, and keeps working offline.</div>
     ${warn}
     ${steps.map((s, i) => `<div class="ins-step"><div class="ins-num">${i+1}</div><div>${s}</div></div>`).join('')}
+    ${tips}
     <div class="dlg-row"><button class="dlg-btn dlg-ok">Got it</button></div>
   </div>`;
   document.body.appendChild(ov);
