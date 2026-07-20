@@ -904,12 +904,31 @@ const isMacSafari = () => !isIOS() && /Mac/i.test(navigator.platform)
 const INS_DISMISS = 'mt.installDismissed';
 function dismissInstall() { localStorage.setItem(INS_DISMISS, '1'); updateInstallBtn(); }
 
+// running inside the native Medwise iOS app (WKWebView bridge present)?
+const inNativeApp = () => !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.medwise);
+
+// Native app: post every med's next-dose time so the app schedules REAL local
+// notifications that fire even when closed — the thing the web version can't do.
+function scheduleNativeAlerts() {
+  if (!inNativeApp()) return;
+  try {
+    const alerts = meds.map(m => {
+      const last = lastDose(m.id);
+      if (!last) return null;
+      const at = last.takenAt + m.hours * 3600e3;
+      if (at <= Date.now()) return null;
+      return { id: m.id, name: m.name, at, body: `You can take your next ${m.name} dose now.` };
+    }).filter(Boolean);
+    window.webkit.messageHandlers.medwise.postMessage({ type: 'schedule', alerts });
+  } catch (e) {}
+}
+
 // Banner sits at the top so it's never buried under the history. Dismissing it
 // drops back to the quiet button at the bottom, so there's always a way in.
 function updateInstallBtn() {
   const banner = document.getElementById('installBanner');
   const btn = document.getElementById('installBtn');
-  const installed = isStandalone();
+  const installed = isStandalone() || inNativeApp();   // native app IS installed
   const dismissed = localStorage.getItem(INS_DISMISS) === '1';
   if (banner) banner.hidden = installed || dismissed;
   if (btn) btn.hidden = installed || !dismissed;
@@ -1210,6 +1229,8 @@ function render() {
      Next dose: ${fmt(d.takenAt + d.hours*3600e3)}</div>
      <span class="del">✎</span></div>`;
   }).join('') || `<div class="empty">Doses you log will appear here</div>`;
+
+  scheduleNativeAlerts();   // keep the native app's dose notifications in step
 }
 
 setInterval(() => {
